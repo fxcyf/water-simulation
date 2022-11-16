@@ -24,7 +24,7 @@
     <ProjectGuid>{931f3a16-80f3-4d8b-b27d-f3e6af771733}</ProjectGuid>
     <RootNamespace>ImGuiSimple</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>RuledSurface</ProjectName>
+    <ProjectName>WaterSimulation</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

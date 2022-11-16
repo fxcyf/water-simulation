@@ -1,8 +1,5 @@
 /*
- Ruled surface                
-(C) Bedrich Benes 2022
-Purdue University
-bbenes@purdue.edu
+Water Simulation
 */
 
 #include "imgui.h"
@@ -40,37 +37,19 @@ bbenes@purdue.edu
 
 using namespace std;
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-//void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
-TrackBallC trackball;
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-bool mouseLeft, mouseMid, mouseRight;
 
 glm::vec3 cameraPos = glm::vec3(3.f, 0.f, 3.f);
 glm::vec3 cameraFront = glm::vec3(-5.0f, -0.0f, -7.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 0.0f, 1.0f);
 float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
-int staticBall = 0;
 float PI = 3.14159;
-//glm::vec3 SPositions[3];
-int bulletBall = 0;
-int moveBall = 0;
-float playerspeed = 2.5f;
-std::vector<glm::vec3> SPositions;
-std::vector<glm::vec3> BPositions;
-std::vector<glm::vec3> BVelocity;
-std::vector<glm::vec3> MPositions;
-std::vector<glm::vec3> MVelocity;
-vector <TriangleC> tri;   //all the triangles will be stored here
-std::string filename = "geometry.obj";
 
-GLuint points = 0; //number of points to display the object
-GLuint points2 = 0;
-int steps = 4;//# of subdivisions
+float playerspeed = 2.5f;
 int pointSize = 1;
 int lineWidth = 1;
-float r = .1f;
 bool firstMouse = true;
 float yaw = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
 float pitch = 0.0f;
@@ -78,13 +57,13 @@ float lastX = 800 / 2.0;
 float lastY = 600 / 2.0;
 float fov = 90.0f;
 
-//Vertex array object and vertex buffer object indices 
-GLuint VAO, VBO;
-GLuint VAO2, VBO2;
+glm::vec3 waterColor = glm::vec3(0.30f, 0.51f, 0.66);
+glm::vec3 lightColor = glm::vec3(1.f, 1.f, 1.f);
+glm::vec3 lightPos = glm::vec3(0.f, 0.f, 5.f);
 
-std::vector<int> indices;
-std::vector<int> lineIndices;
-int k1, k2;
+//Vertex array object and vertex buffer object indices 
+GLuint lightVAO, lightVBO;
+
 
 class water_surface {
 private:
@@ -110,6 +89,7 @@ public:
 	float normals_buffer[N * N * 3];
 	int elements_buffer[(N - 1) * (N - 1) * 2 * 3];
 
+
 	water_surface() {
 		glGenVertexArrays(1, &vao);
 		glGenBuffers(1, &elements_vbo);
@@ -121,24 +101,7 @@ public:
 			for (int j = 0; j < this->height; j++) {
 				float x = -3 + 6 * (1 - (i / (float)this->width));
 				float y = -3 + 6 * (1 - (j / (float)this->height));
-
-				/*if (i == 30 && j == 30) {
-					this->u[i][j] = 1.2;
-				}
-				else if ((i==29 && j ==29) || (i==29 && j == 31) || (i == 31 && j == 29)||(i==31 && j==31)) {
-					this->u[i][j] = 0.4;
-				}
-				else if (i > 28 && i < 32 && j > 28 && j < 32) {
-					this->u[i][j] = 0.7;
-				}
-				else if((i == 28 && j == 30) || (i == 32 && j == 30) || (i == 30 && j == 28) || (i == 30 && j == 32)) {
-					this->u[i][j] = 0.2;
-				}
-				else {
-					this->u[i][j] = 0;
-				}*/
 				this->u[i][j] = 0;
-
 				this->v[i][j] = 0;
 			}
 		}
@@ -179,7 +142,7 @@ public:
 
 				float f = c * c * ((v1 + v2 + v3 + v4) - 4 * this->u[i][j]);
 				this->v[i][j] += f * dt;
-				this->v[i][j] *= 0.997;
+				this->v[i][j] *= 0.99;
 				this->u_new[i][j] = u[i][j] + v[i][j] * dt;
 			}
 		}
@@ -375,7 +338,11 @@ public:
 					glm::vec3 p3 = points[p3_i];
 					glm::vec3 p4 = points[p4_i];
 					glm::vec3 p5 = points[p5_i];
-
+					//printf("p1: (%.2f, %.2f, %.2f)\n", p1.x, p1.y, p1.z);
+					//printf("p2: (%.2f, %.2f, %.2f)\n", p2.x, p2.y, p2.z);
+					//printf("p3: (%.2f, %.2f, %.2f)\n", p3.x, p3.y, p3.z);
+					//printf("p4: (%.2f, %.2f, %.2f)\n", p4.x, p4.y, p4.z);
+					//printf("p5: (%.2f, %.2f, %.2f)\n", p5.x, p5.y, p5.z);
 					glm::vec3 n1 = glm::cross(p4 - p1, p3 - p1);
 					n1 = glm::normalize(n1);
 					glm::vec3 n2 = glm::cross(p2 - p1, p4 - p1);
@@ -386,10 +353,13 @@ public:
 					n4 = glm::normalize(n4);
 
 					normal = 0.25f * (n1 + n2 + n3 + n4);
+					//printf("normal: (%.2f, %.2f, %.2f)\n", normal.x, normal.y, normal.z);
+
 				}
 
 				normal = glm::normalize(normal);
 				normals[p1_i] = normal;
+
 			}
 		}
 
@@ -451,160 +421,53 @@ public:
 	}
 };
 
-inline void AddVertex(vector <GLfloat>* a, glm::vec3 A) //check this!
-{
-	a->push_back(A[0]); a->push_back(A[1]); a->push_back(A[2]);
-}
-
-
-glm::vec3 P(GLfloat t)
-{
-	return glm::vec3(0.3 * cos(2 * M_PI * t + M_PI / 2), 0, 0.6 * sin(2 * M_PI * t + M_PI / 2));
-}
-
-inline glm::vec3 Q(GLfloat t)
-{
-	return glm::vec3(0.6 * cos(2 * M_PI * t), 1, 0.6 * sin(2 * M_PI * t));
-}
-
-inline glm::vec3 S(GLfloat u, GLfloat t)
-{
-	return glm::vec3(u * P(t) + (1 - u) * Q(t));
-}
-void CreatePlane(vector <GLfloat>* vv, int n, float t, float sharp) {
-	GLfloat slices = 60/2;
-	GLfloat stacks = 60/2;
-	GLfloat deltaTheta = 1.0f/n;
-	GLfloat deltaPhi = 1.0f/n;
-	for (int i = 0; i < stacks*n; i++)
-	{
-		GLfloat phi = i * deltaPhi -30/2;
-		for (int j = 0; j < slices*n; j++)
-		{
-			GLfloat theta = j * deltaTheta -30/2 ;
-			float k = 1.0f;
-			float f = k * (theta + phi - t);
-			//float f2 = k * (phi - t);
-			float a = sharp / k;
-			float A = 1.0f;
-
-			glm::vec3 ori = glm::vec3(0.0,0.0,0.0);
-			glm::vec3 V_LD = glm::vec3(theta + a * cos(f), a * sin(f), phi + a * cos(f));
-			glm::vec3 V_RD = glm::vec3(theta + deltaTheta + a * cos(f + deltaTheta), a * sin(f + deltaTheta), phi + a * cos(f + deltaTheta));
-			glm::vec3 V_LU = glm::vec3(theta + a * cos(f + deltaPhi), a * sin(f + deltaPhi), phi + deltaPhi + a * cos(f + deltaPhi));
-			glm::vec3 V_RU = glm::vec3(theta + deltaTheta + a * cos(f + deltaTheta + deltaPhi), a * sin(f + deltaTheta + deltaPhi), phi + deltaPhi + a * cos(f + deltaTheta + deltaPhi));
-
-			float D_LD = glm::distance(V_LD, ori);
-			float D_RD = glm::distance(V_RD, ori);
-			float D_LU = glm::distance(V_LU, ori);
-			float D_RU = glm::distance(V_RU, ori);
-			float D_LD_ = 1;
-			float D_RD_ = 1;
-			float D_LU_ = 1; 
-			float D_RU_ = 1;
-			if (D_LD > t) {
-				D_LD_ = 0;
-			}
-			if (D_RD > t) {
-				D_RD_ = 0;
-			}
-			if (D_LU > t) {
-				D_LU_ = 0;
-			}
-			if (D_RU > t) {
-				D_RU_ = 0;
-			}
-			if (t > 20) {
-				A = 0;
-			}
-			//lower triangle
-			AddVertex(vv, V_LD + glm::vec3(0.0, (1-t*0.05)*A * (1 / ((D_LD+1))) * sin(-PI * D_LD_*(t-D_LD)), 0.0));
-			AddVertex(vv, V_RD + glm::vec3(0.0, (1 - t * 0.05) * A * (1 / ((D_RD + 1))) * sin(-PI * D_RD_ * (t-D_RD)), 0.0));
-			AddVertex(vv, V_LU + glm::vec3(0.0, (1 - t * 0.05) * A * (1 / ((D_LU + 1))) * sin(-PI * D_LU_ * (t-D_LU) ),0.0));
-			//upper triangle
-			AddVertex(vv, V_RD + glm::vec3(0.0, (1 - t * 0.05) * A * (1 / ((D_RD + 1))) * sin(-PI * D_RD_ * (t - D_RD)),0.0));
-			AddVertex(vv, V_LU + glm::vec3(0.0, (1 - t * 0.05) * A * (1 / ((D_LU + 1))) * sin(-PI * D_LU_ * (t - D_LU)),0.0));
-			AddVertex(vv, V_RU + glm::vec3(0.0, (1 - t * 0.05) * A * (1 / ((D_RU + 1))) * sin(-PI * D_RU_ * (t - D_RU)),0.0));
-
-		}
-	}
-}
-
-void CreateSphere(vector <GLfloat>* vv, int n) {
-	GLfloat step = 1.f / n;
-	GLfloat slices = 30;
-	GLfloat stacks = 20;
-	GLfloat deltaTheta = 2 * M_PI / (GLfloat)slices;
-	GLfloat deltaPhi = M_PI / (GLfloat)stacks;
-	for (int i = 0; i < stacks; i++)
-	{
-		GLfloat phi = i * deltaPhi;
-		for (int j = 0; j < slices; j++)
-		{
-			GLfloat theta = j * deltaTheta;
-
-			//lower triangle
-			AddVertex(vv, glm::vec3(r * cos(theta) * sin(phi),
-				r * sin(theta) * sin(phi),
-				r * cos(phi)));
-			AddVertex(vv, glm::vec3(r * cos(theta + deltaTheta) * sin(phi),
-				r * sin(theta + deltaTheta) * sin(phi),
-				r * cos(phi)));
-			AddVertex(vv, glm::vec3(r * cos(theta) * sin(phi + deltaPhi),
-				r * sin(theta) * sin(phi + deltaPhi),
-				r * cos(phi + deltaPhi)));
-			//upper triangle
-			AddVertex(vv, glm::vec3(r * cos(theta + deltaTheta) * sin(phi),
-				r * sin(theta + deltaTheta) * sin(phi),
-				r * cos(phi)));
-			AddVertex(vv, glm::vec3(r * cos(theta) * sin(phi + deltaPhi),
-				r * sin(theta) * sin(phi + deltaPhi),
-				r * cos(phi + deltaPhi)));
-			AddVertex(vv, glm::vec3(r * cos(theta + deltaTheta) * sin(phi + deltaPhi),
-				r * sin(theta + deltaTheta) * sin(phi + deltaPhi),
-				r * cos(phi + deltaPhi)));
-
-		}
-	}
-}
-void CreateRuled(vector <GLfloat>* vv, int n)
-{
-	GLfloat step = 1.f / n;
-	for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			//lower triangle
-			AddVertex(vv, S(i * step, j * step));
-			AddVertex(vv, S((i + 1) * step, j * step));
-			AddVertex(vv, S((i + 1) * step, (j + 1) * step));
-			//upper triangle
-			AddVertex(vv, S(i * step, j * step));
-			AddVertex(vv, S((i + 1) * step, (j + 1) * step));
-			AddVertex(vv, S(i * step, (j + 1) * step));
-		}
-	}
-}
 
 int CompileShaders() {
 	//Vertex Shader
-	const char* vsSrc= "#version 330 core\n"
+	const char* vsSrc = "#version 330 core\n"
 		"layout (location = 0) in vec4 iPos;\n"
 		"layout (location = 1) in vec3 aNormal;\n"
+		"out vec3 FragPos;\n"
+		"out vec3 Normal;\n"
 		"uniform mat4 modelview;\n"
+		"uniform mat4 model;\n"
+		"uniform mat3 normalMat;\n"
 		"void main()\n"
 		"{\n"
-		"   vec4 oPos=modelview*iPos;\n"
+		"   vec4 oPos=modelview * iPos;\n"
 		"   gl_Position = vec4(oPos.x, oPos.y, oPos.z, oPos.w);\n"
+		"   FragPos = vec3(model * iPos);\n"
+		"   Normal = normalMat * normalize(aNormal);\n"
 		"}\0";
 
 	//Fragment Shader
 	const char* fsSrc = "#version 330 core\n"
 		"out vec4 col;\n"
-		"uniform vec4 color;\n"
+		"in vec3 Normal;\n"
+		"in vec3 FragPos;\n"
+		"uniform vec3 color;\n"
+		"uniform vec3 lightColor;\n"
+		"uniform vec3 lightPos;\n"
+		"uniform vec3 viewPos;\n"
 		"void main()\n"
 		"{\n"
-		"   col = color;\n"
+		"	float ambientStrength = 0.1;\n"
+		"	vec3 ambient = ambientStrength * lightColor;\n"
+
+		"	float diffuseStrength = 0.8;\n"
+		"	vec3 norm = normalize(Normal);\n"
+		"	vec3 lightDir = normalize(lightPos - FragPos);\n"
+		"	float diff = max(dot(norm, lightDir), 0.0);\n"
+		"	vec3 diffuse = diffuseStrength * diff * lightColor;\n"
+
+		"	float specularStrength = 0.5;\n"
+		"	vec3 viewDir = normalize(viewPos - FragPos);\n"
+		"	vec3 reflectDir = reflect(-lightDir, norm);\n"
+		"	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);\n"
+		"	vec3 specular = specularStrength * spec * lightColor;\n"
+
+		"	vec3 result = (ambient + diffuse + specular) * color;\n"
+		"   col = vec4(result, 1.0);\n"
 		"}\n\0";
 
 	//Create VS object
@@ -633,48 +496,95 @@ int CompileShaders() {
 	return shaderProg;
 }
 
-void BuildScene2(GLuint& VBO, GLuint& VAO, int n, float t, float sharp) { //return VBO and VAO values n is the subdivision
-	vector<GLfloat> v;
-	CreatePlane(&v, n, t, sharp);
-	//now get it ready for saving as OBJ
-	
+int CompileLightShaders() {
+	//Vertex Shader
+	const char* vsSrc = "#version 330 core\n"
+		"layout (location = 0) in vec4 iPos;\n"
+		"uniform mat4 modelview;\n"
+		"void main()\n"
+		"{\n"
+		"   vec4 oPos=modelview*iPos;\n"
+		"   gl_Position = vec4(oPos.x, oPos.y, oPos.z, oPos.w);\n"
+		"}\0";
 
-	//make VAO
-	glGenVertexArrays(1, &VAO2);
-	glGenBuffers(1, &VBO2);
+	//Fragment Shader
+	const char* fsSrc = "#version 330 core\n"
+		"out vec4 col;\n"
+		"void main()\n"
+		"{\n"
+		"   col = vec4(1.0);\n"
+		"}\n\0";
 
-	//bind it
-	glBindVertexArray(VAO2);
+	//Create VS object
+	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+	//Attach VS src to the Vertex Shader Object
+	glShaderSource(vs, 1, &vsSrc, NULL);
+	//Compile the vs
+	glCompileShader(vs);
 
-	//bind the VBO
-	glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-	//send the data to the GPU
-	points2 = v.size();
-	glBufferData(GL_ARRAY_BUFFER, points2 * sizeof(GLfloat), &v[0], GL_STATIC_DRAW);
+	//The same for FS
+	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fs, 1, &fsSrc, NULL);
+	glCompileShader(fs);
 
-	//Configure the attributes
-//	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glVertexAttribPointer((GLuint)0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	//Make it valid
-	glEnableVertexAttribArray(0);
+	//Get shader program object
+	GLuint shaderProg = glCreateProgram();
+	//Attach both vs and fs
+	glAttachShader(shaderProg, vs);
+	glAttachShader(shaderProg, fs);
+	//Link all
+	glLinkProgram(shaderProg);
 
-	v.clear(); //no need for the data, it is on the GPU now
-
+	//Clear the VS and FS objects
+	glDeleteShader(vs);
+	glDeleteShader(fs);
+	return shaderProg;
 }
-void BuildScene(GLuint& VBO, GLuint& VAO, int n) { //return VBO and VAO values n is the subdivision
-	vector<GLfloat> v;
-	CreateSphere(&v, n);
-	//now get it ready for saving as OBJ
-	tri.clear();
-	for (unsigned int i = 0; i < v.size(); i += 9) { //stride 3 - 3 vertices per triangle
-		TriangleC tmp;
-		glm::vec3 a, b, c;
-		a=glm::vec3(v[i], v[i + 1], v[i + 2]);
-		b=glm::vec3(v[i + 3], v[i + 4], v[i + 5]);
-		c = glm::vec3(v[i + 6], v[i + 7], v[i + 8]);
-		tmp.Set(a, b, c); //store them for 3D export
-		tri.push_back(tmp);
-	}
+
+void BuildLightScene(GLuint& VBO, GLuint& VAO) { //return VBO and VAO values n is the subdivision
+	float vertices[] = {
+		-0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		-0.5f,  0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+
+		-0.5f, -0.5f,  0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+		-0.5f, -0.5f,  0.5f,
+
+		-0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+		-0.5f, -0.5f, -0.5f,
+		-0.5f, -0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+
+		-0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f, -0.5f,
+		 0.5f, -0.5f,  0.5f,
+		 0.5f, -0.5f,  0.5f,
+		-0.5f, -0.5f,  0.5f,
+		-0.5f, -0.5f, -0.5f,
+
+		-0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f, -0.5f,
+		 0.5f,  0.5f,  0.5f,
+		 0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f,  0.5f,
+		-0.5f,  0.5f, -0.5f,
+	};
 
 	//make VAO
 	glGenVertexArrays(1, &VAO);
@@ -686,29 +596,19 @@ void BuildScene(GLuint& VBO, GLuint& VAO, int n) { //return VBO and VAO values n
 	//bind the VBO
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	//send the data to the GPU
-	points = v.size();
-	glBufferData(GL_ARRAY_BUFFER, points * sizeof(GLfloat), &v[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
 	//Configure the attributes
-//	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glVertexAttribPointer((GLuint)0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glVertexAttribPointer((GLuint)0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
 	//Make it valid
 	glEnableVertexAttribArray(0);
-
-	v.clear(); //no need for the data, it is on the GPU now
-
 }
+
 
 //Quit when ESC is released
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-		if (bulletBall < 3) {
-			BPositions.push_back(cameraPos);
-			BVelocity.push_back(20.0f * cameraFront);
-			bulletBall++;
-		}
-	}
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
 
@@ -725,35 +625,39 @@ int main()
 	//make OpenGL window
 	GLFWwindow* window = glfwCreateWindow(1000,1000, "Simple", NULL, NULL);
 	//is all OK?
-	lastX = 500;
-	lastY = 500;
 	if (window == NULL)
 	{
 		std::cout << "Cannot open GLFW window" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
+	lastX = 500;
+	lastY = 500;
 	//Paste the window to the current context
 	glfwMakeContextCurrent(window);
 
 	//Load GLAD to configure OpenGL
 	gladLoadGL();
-	//Set the viewport
-	//glViewport(0, 0, 800, 800);
-	float X = 800;
-	float Y = 800;
-	//once the OpenGL context is done, build the scene and compile shaders
-	//BuildScene2(VBO2, VAO2, steps, 0, 0.3);
-	water_surface water_surface;
-	//BuildScene(VBO, VAO, steps);
+
+	
+	water_surface waterSurface;
 	int shaderProg = CompileShaders();
+	glUseProgram(shaderProg);
 	GLint modelviewParameter = glGetUniformLocation(shaderProg, "modelview");
+	GLint modelParameter = glGetUniformLocation(shaderProg, "model");
+	GLint normalMatParameter = glGetUniformLocation(shaderProg, "normalMat");
+	GLint lightPosParameter = glGetUniformLocation(shaderProg, "lightPos");
+	GLint viewPosParameter = glGetUniformLocation(shaderProg, "viewPos");
+
 	//Background color
 	glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	//Use shader
-	glUseProgram(shaderProg);
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	glPointSize(pointSize);
+	glLineWidth(lineWidth);
+
+	BuildLightScene(lightVBO, lightVAO);
+	int shaderProgLight = CompileLightShaders();
+
 
 	// Initialize ImGUI
 	IMGUI_CHECKVERSION();
@@ -763,22 +667,13 @@ int main()
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
 
-	bool drawScene = true;
-	float color[4] = { 0.8f, 0.8f, 0.2f, 1.0f };
-	//send the color to the fragment shader
-	glUniform4f(glGetUniformLocation(shaderProg, "color"), color[0], color[1], color[2], color[3]);
-
-
 	glfwSetKeyCallback(window, KbdCallback); //set keyboard callback to quit
 	//glfwSetCursorPosCallback(window, mouse_callback);
 	//glfwSetMouseButtonCallback(window, MouseButtonCallback);;
 	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	//glEnable(GL_DEPTH_TEST);
 
-	GLfloat ver[] = { 500,500 };
 	// Main while loop
-	bool is_drawing_continous = true;
-	
 	while (!glfwWindowShouldClose(window))
 	{
 		
@@ -786,32 +681,14 @@ int main()
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 		
-
 		//Clean the window
 		processInput(window);
-		//processInput(window);
-		//glClear(GL_COLOR_BUFFER_BIT);
-		glClear(GL_COLOR_BUFFER_BIT );
-		
-		
+		glClear(GL_COLOR_BUFFER_BIT);
+
 		
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-		
-		//BuildScene2(VBO, VAO, steps, currentFrame, 0.3);
-		
-		
-		
-		//if (ImGui::SliderInt("point Size", &pointSize, 1, 10, "%d", 0)) {
-		glPointSize(pointSize); //set the new point size if it has been changed			
-		//}
-		//if (ImGui::SliderInt("line width", &lineWidth, 1, 10, "%d", 0)) {
-		glLineWidth(lineWidth); //set the new point size if it has been changed			
-		//}
-		//if (ImGui::ColorEdit4("Color", color)) { //set the new color only if it has changed
-		glUniform4f(glGetUniformLocation(shaderProg, "color"), color[0], color[1], color[2], color[3]);
-		//}
 
 		//set the projection matrix
 		glm::mat4 proj = glm::perspective(fov, 1.0f, 0.1f, 100.0f);
@@ -839,24 +716,25 @@ int main()
 			int mouse_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 			if (mouse_state == GLFW_PRESS && !is_mouse_down) {
 				is_mouse_down = true;
-
+			}
+			if (mouse_state == GLFW_PRESS || mouse_state == GLFW_REPEAT) {
 				if (mouse_intersection.x > -3.0 &&
 					mouse_intersection.x < 3.0 &&
 					mouse_intersection.y > -3.0 &&
 					mouse_intersection.y < 3.0) {
-					int i = (mouse_intersection.x + 3.0) / 6.0 * water_surface.width;
-					int j = (mouse_intersection.y + 3.0) / 6.0 * water_surface.height;
+					int i = (mouse_intersection.x + 3.0) / 6.0 * waterSurface.width;
+					int j = (mouse_intersection.y + 3.0) / 6.0 * waterSurface.height;
 
-					if (i > 0 && j > 0 && i < water_surface.width - 1 && j < water_surface.height - 1) {
-						water_surface.u[i][j] = 1.2;
-						water_surface.u[i - 1][j - 1] = 0.7;
-						water_surface.u[i - 1][j] = 0.7;
-						water_surface.u[i - 1][j + 1] = 0.7;
-						water_surface.u[i + 1][j - 1] = 0.7;
-						water_surface.u[i + 1][j] = 0.7;
-						water_surface.u[i + 1][j + 1] = 0.7;
-						water_surface.u[i][j + 1] = 0.7;
-						water_surface.u[i][j - 1] = 0.7;
+					if (i > 0 && j > 0 && i < waterSurface.width - 1 && j < waterSurface.height - 1) {
+						waterSurface.u[i][j] = 0.7;
+						waterSurface.u[i - 1][j - 1] = 0.4;
+						waterSurface.u[i - 1][j] = 0.6;
+						waterSurface.u[i - 1][j + 1] = 0.4;
+						waterSurface.u[i + 1][j - 1] = 0.4;
+						waterSurface.u[i + 1][j] = 0.6;
+						waterSurface.u[i + 1][j + 1] = 0.4;
+						waterSurface.u[i][j + 1] = 0.6;
+						waterSurface.u[i][j - 1] = 0.6;
 					}
 				}
 			}
@@ -866,16 +744,36 @@ int main()
 		}
 
 		
-		water_surface.update(deltaTime);
+		waterSurface.update(deltaTime);
 
-		glUniform4f(glGetUniformLocation(shaderProg, "color"), 1.0f, 1.0f, 1.0f, 0.0f);
-		glm::mat4 model2 = glm::mat4(1.0f);
-		model2 = glm::translate(model2, glm::vec3(0.0f, 0.0f, 0.0f));
-		glm::mat4 modelView2 = proj * view * model2;
-		glUniformMatrix4fv(modelviewParameter, 1, GL_FALSE, glm::value_ptr(modelView2));
-		glBindVertexArray(water_surface.vao);
-		//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, water_surface.elements_vbo);
-		glDrawElements(GL_TRIANGLES, (water_surface.N - 1) * (water_surface.N - 1) * 2 * 3, GL_UNSIGNED_INT, 0);
+		glUseProgram(shaderProg);
+		glBindVertexArray(waterSurface.vao);
+
+		//send the color to the fragment shader
+		glUniform3f(glGetUniformLocation(shaderProg, "color"), waterColor[0], waterColor[1], waterColor[2]);
+		glUniform3f(glGetUniformLocation(shaderProg, "lightColor"), lightColor[0], lightColor[1], lightColor[2]);
+
+		glm::mat4 model = glm::mat4(1.0f);
+		glm::mat4 modelView = proj * view * model;
+		glm::mat3 normalMat = glm::mat3(glm::transpose(glm::inverse(model)));
+		glUniformMatrix4fv(modelviewParameter, 1, GL_FALSE, glm::value_ptr(modelView));
+		glUniformMatrix4fv(modelParameter, 1, GL_FALSE, glm::value_ptr(model));
+		glUniformMatrix3fv(normalMatParameter, 1, GL_FALSE, glm::value_ptr(normalMat));
+		glUniform3f(lightPosParameter, lightPos[0], lightPos[1], lightPos[2]);
+		glUniform3f(viewPosParameter, cameraPos[0], cameraPos[1], cameraPos[2]);
+
+		glDrawElements(GL_TRIANGLES, (waterSurface.N - 1) * (waterSurface.N - 1) * 2 * 3, GL_UNSIGNED_INT, 0);
+
+		glUseProgram(shaderProgLight);
+		glBindVertexArray(lightVAO);
+
+		model = glm::mat4();
+		model = glm::translate(model, lightPos);
+		model = glm::scale(model, glm::vec3(0.2f));
+		modelView = proj * view * model;
+		glUniformMatrix4fv(glGetUniformLocation(shaderProgLight, "modelview"), 1, GL_FALSE, glm::value_ptr(modelView));
+
+		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		// Renders the ImGUI elements
 		ImGui::Render();
@@ -886,9 +784,12 @@ int main()
 		glfwPollEvents();
 	}
 	//Cleanup
-	glDeleteVertexArrays(1, &VAO2);
-	glDeleteBuffers(1, &VBO2);
+	glDeleteVertexArrays(1, &lightVAO);
+	glDeleteBuffers(1, &lightVBO);
+	glDeleteVertexArrays(1, &waterSurface.vao);
+	glDeleteBuffers(1, &waterSurface.elements_vbo);
 	glDeleteProgram(shaderProg);
+	glDeleteProgram(shaderProgLight);
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
