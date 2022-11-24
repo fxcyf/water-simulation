@@ -24,14 +24,18 @@ Water Simulation
 #include <string>
 #include <vector>			//Standard template library
 #include <array>
+#include <algorithm>
 
 #include "triangle.h"  //triangles
 #include "helper.h"         
 #include "objGen.h"         //to save OBJ file format for 3D printing
 #include "trackball.h"
+#include "shaders.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <cstdlib>
+
 
 #pragma warning(disable : 4996)
 #pragma comment(lib, "glfw3.lib")
@@ -74,7 +78,7 @@ private:
 	GLuint points_vbo, normals_vbo;
 
 public:
-	static constexpr int width = 300, height = 150;
+	static constexpr int width = 150, height = 300;
 	static constexpr int N = width + 1, M = height + 1;
 
 	float water_width = (float)width / 10, water_height = (float)height / 10;
@@ -83,8 +87,8 @@ public:
 	float damp = 0.99;
 	float u[width][height];
 	float v[width][height];
-	float u_new[width][height];
-	float control_point_heights[width][height];
+	//float u_new[width][height];
+	//float control_point_heights[width][height];
 
 	GLuint vao, elements_vbo;
 	GLuint caustic_vao, caustic_vbo;
@@ -98,6 +102,9 @@ public:
 	//float normals_buffer[N * M * 3];
 	//float caustic_buffer[N * M * 3];
 	//int elements_buffer[(N - 1) * (M - 1) * 2 * 3];
+
+	float** u_new = (float**)malloc(sizeof(float*) * width);
+	float** control_point_heights = (float**)malloc(sizeof(float*) * width);
 
 	glm::vec3* points = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
 	glm::vec3* normals = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
@@ -124,10 +131,18 @@ public:
 				this->u[i][j] = 0;
 				this->v[i][j] = 0;
 			}
+			u_new[i] = (float*)malloc(sizeof(float) * height);
+			control_point_heights[i] = (float*)malloc(sizeof(float) * height);
 		}
 	}
 
 	~WaterSurface() {
+		for (int i = 0; i < width; i++) {
+			free(u_new[i]);
+			free(control_point_heights[i]);
+		}
+		free(u_new);
+		free(control_point_heights);
 		free(points);
 		free(normals);
 		free(caustic);
@@ -166,113 +181,7 @@ public:
 		}
 	}
 
-	void update(float dt) {
-		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
-				float v1, v2, v3, v4;
-
-				if (i == 0) {
-					v1 = this->u[i][j];
-				}
-				else {
-					v1 = this->u[i - 1][j];
-				}
-
-				if (i == this->width - 1) {
-					v2 = this->u[i][j];
-				}
-				else {
-					v2 = this->u[i + 1][j];
-				}
-
-				if (j == 0) {
-					v3 = this->u[i][j];
-				}
-				else {
-					v3 = this->u[i][j - 1];
-				}
-
-				if (j == this->height - 1) {
-					v4 = this->u[i][j];
-				}
-				else {
-					v4 = this->u[i][j + 1];
-				}
-
-				float f = c * c * ((v1 + v2 + v3 + v4) - 4 * this->u[i][j]);
-				this->v[i][j] += f * dt;
-				this->v[i][j] *= this->damp;
-				this->u_new[i][j] = u[i][j] + v[i][j] * dt;
-			}
-		}
-
-		double sum_of_u = 0.0;
-		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
-				sum_of_u += this->u_new[i][j];
-			}
-		}
-
-		double avg_of_u = sum_of_u / (this->width * this->height);
-
-		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
-				this->u[i][j] = this->u_new[i][j] - avg_of_u;
-				this->control_point_heights[i][j] = this->u[i][j];
-			}
-		}
-
-		static int x_delta[9] = { 0, -1, -1, 0, 1, 1, 1, 0, -1 };
-		static int y_delta[9] = { 0, 0, -1, -1, -1, 0, 1, 1, 1 };
-
-		for (int i = 3; i < this->width; i += 3) {
-			for (int j = 3; j < this->height; j += 3) {
-				glm::vec3 points[9];
-
-				for (int k = 0; k < 9; k++) {
-					int x_index = i + x_delta[k];
-					int y_index = j + y_delta[k];
-
-					points[k].x = -this->water_width / 2 + this->water_width * (1 - (x_index / (float)this->width));
-					points[k].y = -this->water_height / 2 + this->water_height * (1 - (y_index / (float)this->height));
-					points[k].z = this->control_point_heights[x_index][y_index];
-				}
-
-				float sum_xx = 0.0;
-				float sum_yy = 0.0;
-				float sum_xy = 0.0;
-				float sum_yz = 0.0;
-				float sum_xz = 0.0;
-
-				for (int k = 0; k < 9; k++) {
-					sum_xx += points[k].x * points[k].x;
-					sum_yy += points[k].y * points[k].y;
-					sum_xy += points[k].x * points[k].y;
-					sum_yz += points[k].y * points[k].z;
-					sum_xz += points[k].x * points[k].z;
-				}
-
-				float D = sum_xx * sum_yy - sum_xy * sum_xy;
-				float a = (sum_yz * sum_xy - sum_xz * sum_yy) / D;
-				float b = (sum_xy * sum_xz - sum_xx * sum_yz) / D;
-
-				glm::vec3 n(a, b, 1);
-				glm::vec3 p = points[0];
-
-				for (int k = 1; k < 9; k++) {
-					glm::vec3 p0 = points[k];
-
-					float z = (n.x * (p.x - p0.x) + n.y * (p.y - p0.y)) / n.z + p.z;
-
-					int x_index = i + x_delta[k];
-					int y_index = j + y_delta[k];
-					this->control_point_heights[x_index][y_index] = z;
-				}
-			}
-		}
-
-		// Calculate points
-		double water_sum_of_height = 0.0;
+	void pointsCalculate() {
 		int point_index = 0;
 		for (int x = 0; x < N; x++) {
 			//printf("u: (%.2f)\n", x);
@@ -305,12 +214,11 @@ public:
 				avg_height /= sum_of_weights;
 
 				points[point_index++] = glm::vec3(i, j, avg_height);
-				water_sum_of_height += avg_height;
 			}
 		}
+	}
 
-
-		// Calculate normals
+	void normalsCalculate() {
 		for (int i = 0; i < N; i++) {
 			//printf("u: (%i)\n", i);
 			for (int j = 0; j < M; j++) {
@@ -436,8 +344,9 @@ public:
 
 			}
 		}
+	}
 
-		// Calculate the elements for each triangle
+	void elementsCalculate() {
 		int e_i = 0;
 		for (int i = 0; i < N - 1; i++) {
 			for (int j = 0; j < M - 1; j++) {
@@ -457,6 +366,9 @@ public:
 			}
 		}
 
+	}
+
+	void causticCalculate() {
 		int caustic_index = 0;
 		glm::vec3 light_pos_vec = glm::vec3(light_pos[0], light_pos[1], light_pos[2]);
 		//waterSurface.points;
@@ -490,7 +402,9 @@ public:
 			caustic[caustic_index++] = caustic_pos;
 		}
 
+	}
 
+	void buildScene() {
 		glBindVertexArray(vao);
 
 		// Set up the points vbo
@@ -549,281 +463,140 @@ public:
 
 		glBindVertexArray(0);
 	}
+
+	void update(float dt) {
+		for (int i = 0; i < this->width; i++) {
+			for (int j = 0; j < this->height; j++) {
+				float v1, v2, v3, v4;
+
+				if (i == 0) {
+					v1 = this->u[i][j];
+				}
+				else {
+					v1 = this->u[i - 1][j];
+				}
+
+				if (i == this->width - 1) {
+					v2 = this->u[i][j];
+				}
+				else {
+					v2 = this->u[i + 1][j];
+				}
+
+				if (j == 0) {
+					v3 = this->u[i][j];
+				}
+				else {
+					v3 = this->u[i][j - 1];
+				}
+
+				if (j == this->height - 1) {
+					v4 = this->u[i][j];
+				}
+				else {
+					v4 = this->u[i][j + 1];
+				}
+
+				float f = c * c * ((v1 + v2 + v3 + v4) - 4 * this->u[i][j]);
+				this->v[i][j] += f * dt;
+				this->v[i][j] *= this->damp;
+				this->u_new[i][j] = u[i][j] + v[i][j] * dt;
+			}
+		}
+
+		double sum_of_u = 0.0;
+		for (int i = 0; i < this->width; i++) {
+			for (int j = 0; j < this->height; j++) {
+				sum_of_u += this->u_new[i][j];
+			}
+		}
+
+		double avg_of_u = sum_of_u / (this->width * this->height);
+
+		for (int i = 0; i < this->width; i++) {
+			for (int j = 0; j < this->height; j++) {
+				this->u[i][j] = this->u_new[i][j] - avg_of_u;
+				this->control_point_heights[i][j] = this->u[i][j];
+			}
+		}
+
+		static int x_delta[9] = { 0, -1, -1, 0, 1, 1, 1, 0, -1 };
+		static int y_delta[9] = { 0, 0, -1, -1, -1, 0, 1, 1, 1 };
+
+		for (int i = 3; i < this->width; i += 3) {
+			for (int j = 3; j < this->height; j += 3) {
+				glm::vec3 points[9];
+
+				for (int k = 0; k < 9; k++) {
+					int x_index = i + x_delta[k];
+					int y_index = j + y_delta[k];
+
+					points[k].x = -this->water_width / 2 + this->water_width * (1 - (x_index / (float)this->width));
+					points[k].y = -this->water_height / 2 + this->water_height * (1 - (y_index / (float)this->height));
+					points[k].z = this->control_point_heights[x_index][y_index];
+				}
+
+				float sum_xx = 0.0;
+				float sum_yy = 0.0;
+				float sum_xy = 0.0;
+				float sum_yz = 0.0;
+				float sum_xz = 0.0;
+
+				for (int k = 0; k < 9; k++) {
+					sum_xx += points[k].x * points[k].x;
+					sum_yy += points[k].y * points[k].y;
+					sum_xy += points[k].x * points[k].y;
+					sum_yz += points[k].y * points[k].z;
+					sum_xz += points[k].x * points[k].z;
+				}
+
+				float D = sum_xx * sum_yy - sum_xy * sum_xy;
+				float a = (sum_yz * sum_xy - sum_xz * sum_yy) / D;
+				float b = (sum_xy * sum_xz - sum_xx * sum_yz) / D;
+
+				glm::vec3 n(a, b, 1);
+				glm::vec3 p = points[0];
+
+				for (int k = 1; k < 9; k++) {
+					glm::vec3 p0 = points[k];
+
+					float z = (n.x * (p.x - p0.x) + n.y * (p.y - p0.y)) / n.z + p.z;
+
+					int x_index = i + x_delta[k];
+					int y_index = j + y_delta[k];
+					this->control_point_heights[x_index][y_index] = z;
+				}
+			}
+		}
+
+		// Calculate points
+		this->pointsCalculate();
+		// Calculate normals
+		this->normalsCalculate();
+		// Calculate the elements for each triangle
+		this->elementsCalculate();
+		// Calculate the caustic
+		this->causticCalculate();
+		// Build scene
+		this->buildScene();
+	}
 };
 
+void InitShaders(GLuint* program, const char* vsSrc, const char* fsSrc) {
+	std::vector<GLuint> shaderList;
 
-int CompileShaders() {
-	//Vertex Shader
-	const char* vsSrc = "#version 330 core\n"
-		"layout (location = 0) in vec4 iPos;\n"
-		"layout (location = 1) in vec3 aNormal;\n"
-		"out vec3 FragPos;\n"
-		"out vec3 Normal;\n"
-		"uniform mat4 modelview;\n"
-		"uniform mat4 model;\n"
-		"uniform mat3 normalMat;\n"
-		"void main()\n"
-		"{\n"
-		"   vec4 oPos = modelview * iPos;\n"
-		"   gl_Position = vec4(oPos.x, oPos.y, oPos.z, oPos.w);\n"
-		"   FragPos = vec3(model * iPos);\n"
-		"   Normal = normalMat * normalize(aNormal);\n"
-		"}\0";
+	//load and compile shaders 	
+	shaderList.push_back(CreateShader(GL_VERTEX_SHADER, LoadShader(vsSrc)));
+	shaderList.push_back(CreateShader(GL_FRAGMENT_SHADER, LoadShader(fsSrc)));
 
-	//Fragment Shader
-	const char* fsSrc = "#version 330 core\n"
-		"#extension GL_OES_standard_derivatives : enable\n"
-		"out vec4 col;\n"
-		"in vec3 Normal;\n"
-		"in vec3 FragPos;\n"
-		"uniform vec3 color;\n"
-		"uniform vec3 lightColor;\n"
-		"uniform vec3 lightPos;\n"
-		"uniform vec3 viewPos;\n"
-		"uniform sampler2D floorTexture;\n"
-		"void main()\n"
-		"{\n"
-		"	float ambientStrength = 0.1;\n"
-		"	vec3 ambient = ambientStrength * lightColor;\n"
+	//create the shader program and attach the shaders to it
+	*program = CreateProgram(shaderList);
 
-		"	float diffuseStrength = 0.8;\n"
-		"	vec3 norm = normalize(Normal);\n"
-		"	vec3 lightDir = normalize(lightPos - FragPos);\n"
-		"	float diff = max(dot(norm, lightDir), 0.0);\n"
-		"	vec3 diffuse = diffuseStrength * diff * lightColor;\n"
-
-		"	float specularStrength = 0.5;\n"
-		"	vec3 viewDir = normalize(viewPos - FragPos);\n"
-		"	vec3 reflectDir = reflect(-lightDir, norm);\n"
-		"	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);\n"
-		"	vec3 specular = specularStrength * spec * lightColor;\n"
-
-		//"	float floor_kd = diffuseStrength * diff;\n"
-
-		//"	vec3 incident = normalize(viewPos - FragPos);\n"
-		//"	vec3 refraction = refract(incident, Normal, 0.7);\n"
-
-		//"	vec3 floor_hit_point = FragPos + refraction * ((3 - FragPos.z) / refraction.z);\n"
-		//"	vec2 floor_texture_coord = ((floor_hit_point + vec3(3.0, 3.0, 0.0)) / 6.0).xy;\n"
-
-		"	vec3 result = (ambient + diffuse + specular) * color;\n"
-		"   col = vec4(result, 0.8f);\n"
-		"}\n\0";
-
-	//Create VS object
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-	//Attach VS src to the Vertex Shader Object
-	glShaderSource(vs, 1, &vsSrc, NULL);
-	//Compile the vs
-	glCompileShader(vs);
-
-	//The same for FS
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fs, 1, &fsSrc, NULL);
-	glCompileShader(fs);
-
-	//Get shader program object
-	GLuint shaderProg = glCreateProgram();
-	//Attach both vs and fs
-	glAttachShader(shaderProg, vs);
-	glAttachShader(shaderProg, fs);
-	//Link all
-	glLinkProgram(shaderProg);
-
-	//Clear the VS and FS objects
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-	return shaderProg;
+	//delete shaders (they are on the GPU now)
+	using namespace std;
+	for_each(shaderList.begin(), shaderList.end(), glDeleteShader);
 }
 
-
-int CompileCausticShaders() {
-	//Vertex Shader
-	const char* vsSrc = "#version 330 core\n"
-		"layout (location = 0) in vec3 waterPos;\n"
-		"layout (location = 1) in vec3 causticPos;\n"
-		"out vec3 oldPos;\n"
-		"out vec3 newPos;\n"
-		"uniform mat4 modelview;\n"
-		"uniform mat4 model;\n"
-		"void main()\n"
-		"{\n"
-		"	oldPos = waterPos;\n"
-		"	newPos = causticPos;\n"
-		"   vec4 oPos = modelview * vec4(causticPos, 1.f);\n"
-		"   gl_Position = oPos;\n"
-		"}\0";
-
-	//Fragment Shader
-	const char* fsSrc = "#version 330 core\n"
-		"#extension GL_OES_standard_derivatives : enable\n"
-		"out vec4 col;\n"
-		"in vec3 oldPos;\n"
-		"in vec3 newPos;\n"
-		"uniform vec3 color;\n"
-		"void main()\n"
-		"{\n"
-		"	float causticsFactor = 0.8;"
-		"	float causticsIntensity = 0;"
-		"	float oldArea = length(dFdx(oldPos)) * length(dFdy(oldPos));\n"
-		"	float newArea = length(dFdx(newPos)) * length(dFdy(newPos));\n"
-		"	float ratio = oldArea / newArea;\n"
-		"	if (newArea == 0.) {\n"
-		"		ratio = 2.0e+20;\n"
-		"	} else {\n"
-		"		ratio = oldArea / newArea;\n"
-		"	}\n"
-		"	causticsIntensity = causticsFactor * ratio;"
-		"   col = vec4(color * causticsIntensity, 0.6f);\n"
-		"}\n\0";
-
-	//Create VS object
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-	//Attach VS src to the Vertex Shader Object
-	glShaderSource(vs, 1, &vsSrc, NULL);
-	//Compile the vs
-	glCompileShader(vs);
-
-	//The same for FS
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fs, 1, &fsSrc, NULL);
-	glCompileShader(fs);
-
-	//Get shader program object
-	GLuint shaderProg = glCreateProgram();
-	//Attach both vs and fs
-	glAttachShader(shaderProg, vs);
-	glAttachShader(shaderProg, fs);
-	//Link all
-	glLinkProgram(shaderProg);
-
-	//Clear the VS and FS objects
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-	return shaderProg;
-}
-
-int CompileFloorShaders() {
-	//Vertex Shader
-	const char* vsSrc = "#version 330 core\n"
-		"layout (location = 0) in vec4 iPos;\n"
-		"layout (location = 1) in vec3 aNormal;\n"
-		"layout (location = 2) in vec2 aTexCoord;\n"
-
-		"out vec3 FragPos;\n"
-		"out vec3 Normal;\n"
-		"out vec2 TexCoord;\n"
-
-		"uniform mat4 modelview;\n"
-		"uniform mat4 model;\n"
-		"uniform mat3 normalMat;\n"
-		"void main()\n"
-		"{\n"
-		"   vec4 oPos = modelview * iPos;\n"
-		"   gl_Position = vec4(oPos.x, oPos.y, oPos.z, oPos.w);\n"
-		"   FragPos = vec3(model * iPos);\n"
-		"   Normal = normalMat * normalize(aNormal);\n"
-		"	TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
-		"}\0";
-
-	//Fragment Shader
-	const char* fsSrc = "#version 330 core\n"
-		"out vec4 col;\n"
-		"in vec3 Normal;\n"
-		"in vec3 FragPos;\n"
-		"in vec2 TexCoord;\n"
-
-		"uniform vec3 color;\n"
-		"uniform vec3 lightColor;\n"
-		"uniform vec3 lightPos;\n"
-		"uniform sampler2D floorTexture;\n"
-		"void main()\n"
-		"{\n"
-		"	float ambientStrength = 0.3;\n"
-		"	vec3 ambient = ambientStrength * lightColor;\n"
-
-		"	float diffuseStrength = 0.5;\n"
-		"	vec3 norm = normalize(Normal);\n"
-		"	vec3 lightDir = normalize(lightPos - FragPos);\n"
-		"	float diff = max(dot(norm, lightDir), 0.0);\n"
-		"	vec3 diffuse = diffuseStrength * diff * lightColor;\n"
-
-		"	vec3 texel = texture(floorTexture, TexCoord).xyz;\n"
-		"	vec3 result = ( ambient + diffuse ) * texel;\n"
-		"   col = vec4(result, 0.8f);\n"
-		"}\n\0";
-
-
-	//Create VS object
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-	//Attach VS src to the Vertex Shader Object
-	glShaderSource(vs, 1, &vsSrc, NULL);
-	//Compile the vs
-	glCompileShader(vs);
-
-	//The same for FS
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fs, 1, &fsSrc, NULL);
-	glCompileShader(fs);
-
-	//Get shader program object
-	GLuint shaderProg = glCreateProgram();
-	//Attach both vs and fs
-	glAttachShader(shaderProg, vs);
-	glAttachShader(shaderProg, fs);
-	//Link all
-	glLinkProgram(shaderProg);
-
-	//Clear the VS and FS objects
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-	return shaderProg;
-}
-
-int CompileLightShaders() {
-	//Vertex Shader
-	const char* vsSrc = "#version 330 core\n"
-		"layout (location = 0) in vec4 iPos;\n"
-		"uniform mat4 modelview;\n"
-		"void main()\n"
-		"{\n"
-		"   vec4 oPos = modelview*iPos;\n"
-		"   gl_Position = vec4(oPos.x, oPos.y, oPos.z, oPos.w);\n"
-		"}\0";
-
-	//Fragment Shader
-	const char* fsSrc = "#version 330 core\n"
-		"out vec4 col;\n"
-		"void main()\n"
-		"{\n"
-		"   col = vec4(1.0);\n"
-		"}\n\0";
-
-	//Create VS object
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-	//Attach VS src to the Vertex Shader Object
-	glShaderSource(vs, 1, &vsSrc, NULL);
-	//Compile the vs
-	glCompileShader(vs);
-
-	//The same for FS
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fs, 1, &fsSrc, NULL);
-	glCompileShader(fs);
-
-	//Get shader program object
-	GLuint shaderProg = glCreateProgram();
-	//Attach both vs and fs
-	glAttachShader(shaderProg, vs);
-	glAttachShader(shaderProg, fs);
-	//Link all
-	glLinkProgram(shaderProg);
-
-	//Clear the VS and FS objects
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-	return shaderProg;
-}
 
 void BuildFloorScene(GLuint& VBO, GLuint& VAO, GLuint& Texture, char* file_name) {
 	float vertices[] = {
@@ -988,7 +761,8 @@ int main()
 
 	// waterSurface cannot be moved out of main function
 	WaterSurface water_surface;
-	int shaderProg = CompileShaders();
+	GLuint shaderProg;
+	InitShaders(&shaderProg, (char*)"shaders/water.vert", (char*)"shaders/water.frag");
 	glUseProgram(shaderProg);
 	GLint modelviewParameter = glGetUniformLocation(shaderProg, "modelview");
 	GLint modelParameter = glGetUniformLocation(shaderProg, "model");
@@ -996,20 +770,21 @@ int main()
 	GLint lightPosParameter = glGetUniformLocation(shaderProg, "lightPos");
 	GLint viewPosParameter = glGetUniformLocation(shaderProg, "viewPos");
 
-	int shaderProgCaustic = CompileCausticShaders();
+	GLuint shaderProgCaustic;
+	InitShaders(&shaderProgCaustic, (char*)"shaders/caustic.vert", (char*)"shaders/caustic.frag");
 	glUseProgram(shaderProgCaustic);
 	GLint causticModelviewParameter = glGetUniformLocation(shaderProgCaustic, "modelview");
 	GLint causticModelParameter = glGetUniformLocation(shaderProgCaustic, "model");
 	//GLint causticLightPosParameter = glGetUniformLocation(shaderProgCaustic, "lightPos");
 	//GLint causticDepthParameter = glGetUniformLocation(shaderProgCaustic, "causticDepth");
 
-	char file_name[] = "floor.jpg";
-	BuildFloorScene(floor_vbo, floor_vao, floor_texture, file_name);
-	int shaderProgFloor = CompileFloorShaders();
-
+	BuildFloorScene(floor_vbo, floor_vao, floor_texture, (char*)"floor.jpg");
+	GLuint shaderProgFloor;
+	InitShaders(&shaderProgFloor, (char*)"shaders/floor.vert", (char*)"shaders/floor.frag");
+	
 	BuildLightScene(light_vbo, light_vao);
-	int shaderProgLight = CompileLightShaders();
-
+	GLuint shaderProgLight;
+	InitShaders(&shaderProgLight, (char*)"shaders/light.vert", (char*)"shaders/light.frag");
 
 	//Background color
 	glClearColor(0.2f, 0.2f, 0.2f, 1.0f);

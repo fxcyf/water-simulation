@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="ImGui\imgui.cpp" />
+    <ClCompile Include="ImGui\imgui_demo.cpp" />
+    <ClCompile Include="ImGui\imgui_draw.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_glfw.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="ImGui\imgui_tables.cpp" />
+    <ClCompile Include="ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="src\glad.c" />
+    <ClCompile Include="src\helper.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\objGen.cpp" />
+    <ClCompile Include="src\triangle.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImGui\imconfig.h" />
+    <ClInclude Include="ImGui\imgui.h" />
+    <ClInclude Include="ImGui\imgui_impl_glfw.h" />
+    <ClInclude Include="ImGui\imgui_impl_opengl3.h" />
+    <ClInclude Include="ImGui\imgui_internal.h" />
+    <ClInclude Include="ImGui\imstb_rectpack.h" />
+    <ClInclude Include="ImGui\imstb_textedit.h" />
+    <ClInclude Include="ImGui\imstb_truetype.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{58940906-e743-46ce-b404-071c5689ec31}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\water.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\water.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\caustic.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\caustic.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\floor.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\floor.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\light.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\light.frag">
+      <Filter>shaders</Filter>
+    </None>
+  </ItemGroup>
+</Project>

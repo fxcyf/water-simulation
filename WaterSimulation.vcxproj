@@ -158,6 +158,16 @@
     <ClInclude Include="ImGui\imstb_textedit.h" />
     <ClInclude Include="ImGui\imstb_truetype.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\caustic.frag" />
+    <None Include="shaders\caustic.vert" />
+    <None Include="shaders\floor.frag" />
+    <None Include="shaders\floor.vert" />
+    <None Include="shaders\light.frag" />
+    <None Include="shaders\light.vert" />
+    <None Include="shaders\water.frag" />
+    <None Include="shaders\water.vert" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
