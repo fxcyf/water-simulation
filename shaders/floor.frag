@@ -13,7 +13,7 @@ void main()
 	float ambientStrength = 0.3;
 	vec3 ambient = ambientStrength * lightColor;
 
-	float diffuseStrength = 0.5;
+	float diffuseStrength = 0.8;
 	vec3 norm = normalize(Normal);
 	vec3 lightDir = normalize(lightPos - FragPos);
 	float diff = max(dot(norm, lightDir), 0.0);
@@ -21,5 +21,5 @@ void main()
 
 	vec3 texel = texture(floorTexture, TexCoord).xyz;
 	vec3 result = ( ambient + diffuse ) * texel;
-   col = vec4(result, 0.8f);
+	col = vec4(result, 0.8f);
 }

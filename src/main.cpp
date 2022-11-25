@@ -75,111 +75,7 @@ GLuint floor_texture;
 
 class WaterSurface {
 private:
-	GLuint points_vbo, normals_vbo;
-
-public:
-	static constexpr int width = 150, height = 300;
-	static constexpr int N = width + 1, M = height + 1;
-
-	float water_width = (float)width / 10, water_height = (float)height / 10;
-	float caustic_depth = 3.f;
-	float c = 16.0;
-	float damp = 0.99;
-	float u[width][height];
-	float v[width][height];
-	//float u_new[width][height];
-	//float control_point_heights[width][height];
-
-	GLuint vao, elements_vbo;
-	GLuint caustic_vao, caustic_vbo;
-
-	//glm::vec3 points[N * M];
-	//glm::vec3 normals[N * M];
-	//glm::vec3 caustic[N * M];
-	//glm::vec3 elements[(N - 1) * (M - 1) * 2];
-
-	//float points_buffer[N * M * 3];
-	//float normals_buffer[N * M * 3];
-	//float caustic_buffer[N * M * 3];
-	//int elements_buffer[(N - 1) * (M - 1) * 2 * 3];
-
-	float** u_new = (float**)malloc(sizeof(float*) * width);
-	float** control_point_heights = (float**)malloc(sizeof(float*) * width);
-
-	glm::vec3* points = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
-	glm::vec3* normals = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
-	glm::vec3* caustic = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
-	glm::vec3* elements = (glm::vec3*)malloc(sizeof(glm::vec3) * (N - 1) * (M - 1) * 2);
-
-	float* points_buffer = (float*)malloc(sizeof(float) * N * M * 3);
-	float* normals_buffer = (float*)malloc(sizeof(float) * N * M * 3);
-	float* caustic_buffer = (float*)malloc(sizeof(float) * N * M * 3);
-	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
-
-
-	WaterSurface() {
-		glGenVertexArrays(1, &vao);
-		glGenVertexArrays(1, &caustic_vao);
-		glGenBuffers(1, &elements_vbo);
-		glGenBuffers(1, &normals_vbo);
-		glGenBuffers(1, &points_vbo);
-		glGenBuffers(1, &caustic_vbo);
-
-		// Initialize water heights
-		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
-				this->u[i][j] = 0;
-				this->v[i][j] = 0;
-			}
-			u_new[i] = (float*)malloc(sizeof(float) * height);
-			control_point_heights[i] = (float*)malloc(sizeof(float) * height);
-		}
-	}
-
-	~WaterSurface() {
-		for (int i = 0; i < width; i++) {
-			free(u_new[i]);
-			free(control_point_heights[i]);
-		}
-		free(u_new);
-		free(control_point_heights);
-		free(points);
-		free(normals);
-		free(caustic);
-		free(elements);
-		free(points_buffer);
-		free(normals_buffer);
-		free(caustic_buffer);
-		free(elements_buffer);
-		glDeleteVertexArrays(1, &this->vao);
-		glDeleteVertexArrays(1, &this->caustic_vao);
-		glDeleteBuffers(1, &this->elements_vbo);
-		glDeleteBuffers(1, &this->normals_vbo);
-		glDeleteBuffers(1, &this->points_vbo);
-		glDeleteBuffers(1, &this->caustic_vbo);
-	}
-
-	void poke(glm::vec3 pos, float rippleHeight) {
-		if (pos.x > -this->water_width / 2 &&
-			pos.x < this->water_width / 2 &&
-			pos.y > -this->water_height / 2 &&
-			pos.y < this->water_height / 2) {
-			int i = ((pos.x + this->water_width / 2) * this->width / this->water_width);
-			int j = ((pos.y + this->water_height / 2) * this->height / this->water_height);
-
-			if (i > 0 && j > 0 && i < this->width - 1 && j < this->height - 1) {
-				this->u[i][j] = rippleHeight;
-				this->u[i - 1][j - 1] = rippleHeight * 0.7;
-				this->u[i - 1][j] = rippleHeight * 0.85;
-				this->u[i - 1][j + 1] = rippleHeight * 0.7;
-				this->u[i + 1][j - 1] = rippleHeight * 0.7;
-				this->u[i + 1][j] = rippleHeight * 0.85;
-				this->u[i + 1][j + 1] = rippleHeight * 0.7;
-				this->u[i][j + 1] = rippleHeight * 0.85;
-				this->u[i][j - 1] = rippleHeight * 0.85;
-			}
-		}
-	}
+	GLuint points_vbo, normals_vbo, elements_vbo, caustic_vbo, tex_coords_vbo;
 
 	void pointsCalculate() {
 		int point_index = 0;
@@ -187,7 +83,7 @@ public:
 			//printf("u: (%.2f)\n", x);
 			for (int y = 0; y < M; y++) {
 				float i = -this->water_width / 2 + this->water_width * ((x / (float)this->width));
-				float j = -this->water_height / 2 + this->water_height * ((y / (float)this->height));
+				float j = -this->water_length / 2 + this->water_length * ((y / (float)this->length));
 
 				// Take the average height of the blocks around us, weighted by their distances
 				float sum_of_weights = 0.0;
@@ -198,12 +94,12 @@ public:
 					}
 
 					for (int l = y - 1; l <= y + 1; l++) {
-						if (l < 0 || l >= this->height) {
+						if (l < 0 || l >= this->length) {
 							continue;
 						}
 
 						float u = -this->water_width / 2 + this->water_width * (k / (float)this->width);
-						float v = -this->water_height / 2 + this->water_height * (l / (float)this->height);
+						float v = -this->water_length / 2 + this->water_length * (l / (float)this->length);
 
 						// Make sure the weight is larger for smaller distances
 						float weight = 100 - (u - i) * (u - i) + (j - v) * (j - v);
@@ -380,26 +276,135 @@ public:
 			glm::vec3 refraction = glm::normalize(glm::refract(incident, water_normal, 0.7));
 			float constant = abs((water_pos.z + caustic_depth) / refraction.z);
 			glm::vec3 caustic_pos = water_pos + refraction * constant;
-			float minc = 0;
-			if (caustic_pos.x < -water_width / 2 || caustic_pos.x > water_width / 2 || caustic_pos.y < -water_height / 2 || caustic_pos.y > water_height / 2) {
+			if (caustic_pos.x < -water_width / 2 || caustic_pos.x > water_width / 2 || caustic_pos.y < -water_length / 2 || caustic_pos.y > water_length / 2) {
+				float minc = 1;
 				if (caustic_pos.x < 0 && caustic_pos.y < 0) {
-					minc = max(abs(caustic_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(-water_height / 2 - water_pos.y));
-					caustic_pos = water_pos + refraction * constant / minc;
+					minc = max(abs(caustic_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(-water_length / 2 - water_pos.y));
 				}
 				else if (caustic_pos.x < 0 && caustic_pos.y >= 0) {
-					minc = max(abs(caustic_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(water_height / 2 - water_pos.y));
-					caustic_pos = water_pos + refraction * constant / minc;
+					minc = max(abs(caustic_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y));
 				}
 				else if (caustic_pos.x >= 0 && caustic_pos.y >= 0) {
-					minc = max(abs(caustic_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(water_height / 2 - water_pos.y));
-					caustic_pos = water_pos + refraction * constant / minc;
+					minc = max(abs(caustic_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y));
 				}
 				else {
-					minc = max(abs(caustic_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(-water_height / 2 - water_pos.y));
-					caustic_pos = water_pos + refraction * constant / minc;
+					minc = max(abs(caustic_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(caustic_pos.y - water_pos.y) / abs(-water_length / 2 - water_pos.y));
 				}
+				caustic_pos = water_pos + refraction * constant / minc;
 			}
 			caustic[caustic_index++] = caustic_pos;
+		}
+
+	}
+
+	void texCoordsCalculate() {
+		int tex_coord_index = 0;
+		//waterSurface.points;
+		for (int i = 0; i < N * M; i++) {
+			glm::vec3 water_pos = points[i];
+			float ratio = 0.6;
+			if (water_pos.z > camera_pos.z) {
+				tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
+				continue;
+			}
+			glm::vec3 incident = water_pos - camera_pos;
+			glm::vec3 water_normal = normals[i];
+
+			glm::vec3 refraction = glm::normalize(glm::refract(incident, water_normal, ratio));
+			float constant = abs((water_pos.z + caustic_depth) / refraction.z);
+			glm::vec3 floor_hit_pos = water_pos + refraction * constant;
+			glm::vec2 tex_coord = glm::vec2(
+				(floor_hit_pos.x + water_width / 2) / water_width,
+				(floor_hit_pos.y + water_length / 2) / water_length
+			);
+			if (floor_hit_pos.x <= -water_width / 2 || floor_hit_pos.x >= water_width / 2 || floor_hit_pos.y <= -water_length / 2 || floor_hit_pos.y >= water_length / 2) {
+				float minc = 1;
+				if (floor_hit_pos.x < 0 && floor_hit_pos.y < 0) {
+					float x_const = abs(floor_hit_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x);
+					float y_const = abs(floor_hit_pos.y - water_pos.y) / abs(-water_length / 2 - water_pos.y);
+					minc = max(x_const, y_const);
+					floor_hit_pos = water_pos + refraction * constant / minc;
+					if (x_const > y_const) {
+						tex_coord = glm::vec2(
+							(caustic_depth * (depth_overflow - 1) - floor_hit_pos.z) / (caustic_depth * depth_overflow),
+							(floor_hit_pos.y + water_length / 2) / water_length
+						);
+					}
+					else {
+						tex_coord = glm::vec2(
+							(floor_hit_pos.x + water_width / 2) / water_width,
+							(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow
+						);
+					}
+				}
+				else if (floor_hit_pos.x < 0 && floor_hit_pos.y >= 0) {
+					minc = max(abs(floor_hit_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x), abs(floor_hit_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y));
+					float x_const = abs(floor_hit_pos.x - water_pos.x) / abs(-water_width / 2 - water_pos.x);
+					float y_const = abs(floor_hit_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y);
+					minc = max(x_const, y_const);
+					floor_hit_pos = water_pos + refraction * constant / minc;
+					if (x_const > y_const) {
+						tex_coord = glm::vec2(
+							//(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow,
+							(caustic_depth * (depth_overflow - 1) - floor_hit_pos.z) / (caustic_depth * depth_overflow),
+							(floor_hit_pos.y + water_length / 2) / water_length
+						);
+						
+					}
+					else {
+						tex_coord = glm::vec2(
+							(floor_hit_pos.x + water_width / 2) / water_width,
+							(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow
+						);
+					}
+					
+				}
+				else if (floor_hit_pos.x >= 0 && floor_hit_pos.y >= 0) {
+					minc = max(abs(floor_hit_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(floor_hit_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y));
+					float x_const = abs(floor_hit_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x);
+					float y_const = abs(floor_hit_pos.y - water_pos.y) / abs(water_length / 2 - water_pos.y);
+					minc = max(x_const, y_const);
+					floor_hit_pos = water_pos + refraction * constant / minc;
+					if (x_const > y_const) {
+						tex_coord = glm::vec2(
+							//(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow,
+							(caustic_depth * (depth_overflow - 1) - floor_hit_pos.z) / (caustic_depth * depth_overflow),
+							(floor_hit_pos.y + water_length / 2) / water_length
+						);
+					}
+					else {
+						tex_coord = glm::vec2(
+							(floor_hit_pos.x + water_width / 2) / water_width,
+							(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow
+						);
+					}
+				}
+				else {
+					minc = max(abs(floor_hit_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x), abs(floor_hit_pos.y - water_pos.y) / abs(-water_length / 2 - water_pos.y));
+					float x_const = abs(floor_hit_pos.x - water_pos.x) / abs(water_width / 2 - water_pos.x);
+					float y_const = abs(floor_hit_pos.y - water_pos.y) / abs(-water_length / 2 - water_pos.y);
+					minc = max(x_const, y_const);
+					floor_hit_pos = water_pos + refraction * constant / minc;
+					if (x_const > y_const) {
+						tex_coord = glm::vec2(
+							//(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow,
+							(caustic_depth * (depth_overflow - 1) - floor_hit_pos.z) / (caustic_depth * depth_overflow),
+							(floor_hit_pos.y + water_length / 2) / water_length
+						);
+					}
+					else {
+						tex_coord = glm::vec2(
+							(floor_hit_pos.x + water_width / 2) / water_width,
+							(floor_hit_pos.z + caustic_depth) / caustic_depth / depth_overflow
+						);
+					}
+				}
+			}
+
+			//if (abs(floor_hit_pos.z + caustic_depth) < 0.007) {
+			//	printf("caustic: (%.2f, %.2f, %.2f), tex_coord: (%.2f, %.2f)\n", floor_hit_pos[0], floor_hit_pos[1], floor_hit_pos[2], tex_coord[0], tex_coord[1]);
+			//}
+			tex_coords[tex_coord_index++] = tex_coord;
 		}
 
 	}
@@ -428,6 +433,16 @@ public:
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N * M * 3, normals_buffer, GL_STATIC_DRAW);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 		glEnableVertexAttribArray(1);
+
+		// Set up the texture coordinates vbo
+		for (int i = 0; i < N * M; i++) {
+			tex_coords_buffer[i * 2] = tex_coords[i].x;
+			tex_coords_buffer[i * 2 + 1] = tex_coords[i].y;
+		}
+		glBindBuffer(GL_ARRAY_BUFFER, tex_coords_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N * M * 2, tex_coords_buffer, GL_STATIC_DRAW);
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+		glEnableVertexAttribArray(2);
 
 		// Set up elements vbo
 		for (int i = 0; i < (N - 1) * (M - 1) * 2; i++) {
@@ -464,9 +479,120 @@ public:
 		glBindVertexArray(0);
 	}
 
+public:
+	static constexpr int width = 60, length = 60;
+	static constexpr int N = width + 1, M = length + 1;
+
+	float water_width = (float)width / 10, water_length = (float)length / 10;
+	float caustic_depth = 3.f;
+	float depth_overflow = 1.5;
+
+	float c = 16.0;
+	float damp = 0.99;
+	float u[width][length];
+	float v[width][length];
+	//float u_new[width][height];
+	//float control_point_heights[width][height];
+
+	GLuint vao, caustic_vao;
+
+	//glm::vec3 points[N * M];
+	//glm::vec3 normals[N * M];
+	//glm::vec3 caustic[N * M];
+	//glm::vec3 elements[(N - 1) * (M - 1) * 2];
+
+	//float points_buffer[N * M * 3];
+	//float normals_buffer[N * M * 3];
+	//float caustic_buffer[N * M * 3];
+	//int elements_buffer[(N - 1) * (M - 1) * 2 * 3];
+
+	float** u_new = (float**)malloc(sizeof(float*) * width);
+	float** control_point_heights = (float**)malloc(sizeof(float*) * width);
+
+	glm::vec3* points = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
+	glm::vec3* normals = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
+	glm::vec3* caustic = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
+	glm::vec2* tex_coords = (glm::vec2*)malloc(sizeof(glm::vec2) * N * M);
+	glm::vec3* elements = (glm::vec3*)malloc(sizeof(glm::vec3) * (N - 1) * (M - 1) * 2);
+
+	float* points_buffer = (float*)malloc(sizeof(float) * N * M * 3);
+	float* normals_buffer = (float*)malloc(sizeof(float) * N * M * 3);
+	float* caustic_buffer = (float*)malloc(sizeof(float) * N * M * 3);
+	float* tex_coords_buffer = (float*)malloc(sizeof(float) * N * M * 2);
+	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
+
+
+	WaterSurface() {
+		glGenVertexArrays(1, &vao);
+		glGenVertexArrays(1, &caustic_vao);
+		glGenBuffers(1, &elements_vbo);
+		glGenBuffers(1, &normals_vbo);
+		glGenBuffers(1, &points_vbo);
+		glGenBuffers(1, &caustic_vbo);
+		glGenBuffers(1, &tex_coords_vbo);
+
+		// Initialize water heights
+		for (int i = 0; i < this->width; i++) {
+			for (int j = 0; j < this->length; j++) {
+				this->u[i][j] = 0;
+				this->v[i][j] = 0;
+			}
+			u_new[i] = (float*)malloc(sizeof(float) * length);
+			control_point_heights[i] = (float*)malloc(sizeof(float) * length);
+		}
+	}
+
+	~WaterSurface() {
+		for (int i = 0; i < width; i++) {
+			free(u_new[i]);
+			free(control_point_heights[i]);
+		}
+		free(u_new);
+		free(control_point_heights);
+		free(points);
+		free(normals);
+		free(caustic);
+		free(tex_coords);
+		free(elements);
+		free(points_buffer);
+		free(normals_buffer);
+		free(caustic_buffer);
+		free(elements_buffer);
+		free(tex_coords_buffer);
+		glDeleteVertexArrays(1, &this->vao);
+		glDeleteVertexArrays(1, &this->caustic_vao);
+		glDeleteBuffers(1, &this->elements_vbo);
+		glDeleteBuffers(1, &this->normals_vbo);
+		glDeleteBuffers(1, &this->points_vbo);
+		glDeleteBuffers(1, &this->caustic_vbo);
+		glDeleteBuffers(1, &this->tex_coords_vbo);
+	}
+
+	void poke(glm::vec3 pos, float rippleHeight) {
+		if (pos.x > -this->water_width / 2 &&
+			pos.x < this->water_width / 2 &&
+			pos.y > -this->water_length / 2 &&
+			pos.y < this->water_length / 2) {
+			int i = ((pos.x + this->water_width / 2) * this->width / this->water_width);
+			int j = ((pos.y + this->water_length / 2) * this->length / this->water_length);
+
+			if (i > 0 && j > 0 && i < this->width - 1 && j < this->length - 1) {
+				this->u[i][j] = rippleHeight;
+				this->u[i - 1][j - 1] = rippleHeight * 0.7;
+				this->u[i - 1][j] = rippleHeight * 0.85;
+				this->u[i - 1][j + 1] = rippleHeight * 0.7;
+				this->u[i + 1][j - 1] = rippleHeight * 0.7;
+				this->u[i + 1][j] = rippleHeight * 0.85;
+				this->u[i + 1][j + 1] = rippleHeight * 0.7;
+				this->u[i][j + 1] = rippleHeight * 0.85;
+				this->u[i][j - 1] = rippleHeight * 0.85;
+			}
+		}
+	}
+
 	void update(float dt) {
 		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
+			for (int j = 0; j < this->length; j++) {
 				float v1, v2, v3, v4;
 
 				if (i == 0) {
@@ -490,7 +616,7 @@ public:
 					v3 = this->u[i][j - 1];
 				}
 
-				if (j == this->height - 1) {
+				if (j == this->length - 1) {
 					v4 = this->u[i][j];
 				}
 				else {
@@ -506,15 +632,15 @@ public:
 
 		double sum_of_u = 0.0;
 		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
+			for (int j = 0; j < this->length; j++) {
 				sum_of_u += this->u_new[i][j];
 			}
 		}
 
-		double avg_of_u = sum_of_u / (this->width * this->height);
+		double avg_of_u = sum_of_u / (this->width * this->length);
 
 		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->height; j++) {
+			for (int j = 0; j < this->length; j++) {
 				this->u[i][j] = this->u_new[i][j] - avg_of_u;
 				this->control_point_heights[i][j] = this->u[i][j];
 			}
@@ -524,7 +650,7 @@ public:
 		static int y_delta[9] = { 0, 0, -1, -1, -1, 0, 1, 1, 1 };
 
 		for (int i = 3; i < this->width; i += 3) {
-			for (int j = 3; j < this->height; j += 3) {
+			for (int j = 3; j < this->length; j += 3) {
 				glm::vec3 points[9];
 
 				for (int k = 0; k < 9; k++) {
@@ -532,7 +658,7 @@ public:
 					int y_index = j + y_delta[k];
 
 					points[k].x = -this->water_width / 2 + this->water_width * (1 - (x_index / (float)this->width));
-					points[k].y = -this->water_height / 2 + this->water_height * (1 - (y_index / (float)this->height));
+					points[k].y = -this->water_length / 2 + this->water_length * (1 - (y_index / (float)this->length));
 					points[k].z = this->control_point_heights[x_index][y_index];
 				}
 
@@ -577,6 +703,8 @@ public:
 		this->elementsCalculate();
 		// Calculate the caustic
 		this->causticCalculate();
+		// Calculate the texture of surface
+		this->texCoordsCalculate();
 		// Build scene
 		this->buildScene();
 	}
@@ -778,7 +906,7 @@ int main()
 	//GLint causticLightPosParameter = glGetUniformLocation(shaderProgCaustic, "lightPos");
 	//GLint causticDepthParameter = glGetUniformLocation(shaderProgCaustic, "causticDepth");
 
-	BuildFloorScene(floor_vbo, floor_vao, floor_texture, (char*)"floor.jpg");
+	BuildFloorScene(floor_vbo, floor_vao, floor_texture, (char*)"floor4.jpg");
 	GLuint shaderProgFloor;
 	InitShaders(&shaderProgFloor, (char*)"shaders/floor.vert", (char*)"shaders/floor.frag");
 	
@@ -822,6 +950,7 @@ int main()
 		//Clean the window
 		processInput(window);
 		glClear(GL_COLOR_BUFFER_BIT);
+		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
 		ImGui_ImplOpenGL3_NewFrame();
@@ -882,17 +1011,18 @@ int main()
 			float rain_prob = min(delta_time, 0.016f) * raindrops_freq; // limit the delta time to be 0.05s at minimum (20fps)
 			if (r < rain_prob) {
 				double randx = (double)rand() / (RAND_MAX + 1) * water_surface.water_width - water_surface.water_width / 2;
-				double randy = (double)rand() / (RAND_MAX + 1) * water_surface.water_height - water_surface.water_height / 2;
-				water_surface.poke(glm::vec3(randx, randy, 0), ripple_height);
+				double randy = (double)rand() / (RAND_MAX + 1) * water_surface.water_length - water_surface.water_length / 2;
+				//water_surface.poke(glm::vec3(randx, randy, 0), ripple_height);
 			}
 		}
 		is_first_frame = false;
 
 		water_surface.update(delta_time);
 
-		// Draw walls and floor
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, floor_texture);
+
+		// Draw walls and floor
 		glUseProgram(shaderProgFloor);
 		glBindVertexArray(floor_vao);
 
@@ -902,37 +1032,35 @@ int main()
 		glUniform1i(glGetUniformLocation(shaderProgFloor, "floorTexture"), 0);
 
 		// bottom, right, left, back, front
-		float depth_overflow = 1.2;
 
 		glm::vec3 scale[] = {
-			glm::vec3(water_surface.water_height, water_surface.water_width, 1),
-			glm::vec3(water_surface.water_width, water_surface.caustic_depth * depth_overflow, 1),
-			glm::vec3(water_surface.water_width, water_surface.caustic_depth * depth_overflow, 1),
-			glm::vec3(water_surface.caustic_depth * depth_overflow, water_surface.water_height, 1),
-			// glm::vec3(waterSurface.caustic_depth * 1* depthOverflow, waterSurface.waterHeight, 1)
+			glm::vec3(water_surface.water_width, water_surface.water_length, 1),
+			glm::vec3(water_surface.water_width, water_surface.caustic_depth * water_surface.depth_overflow, 1),
+			glm::vec3(water_surface.water_width, water_surface.caustic_depth * water_surface.depth_overflow, 1),
+			glm::vec3(water_surface.caustic_depth * water_surface.depth_overflow, water_surface.water_length, 1),
+			glm::vec3(water_surface.caustic_depth * water_surface.depth_overflow, water_surface.water_length, 1)
 		};
 
-		glm::vec3 rotation[] = {
-			glm::vec3(0.f, 0.f, 1.f),
-			glm::vec3(-1.f, 0.f, 0.f),
-			glm::vec3(1.f, 0.f, 0.f),
-			glm::vec3(0.f, 1.f, 0.f),
-			// glm::vec3(0.f, -1.f, 0.f),
+		glm::vec4 rotation[] = {
+			glm::vec4(0.f, 0.f, 0.f, 1.f),
+			glm::vec4(90.f, 1.f, 0.f, 0.f),
+			glm::vec4(90.f, 1.f, 0.f, 0.f),
+			glm::vec4(90.f, 0.f, 1.f, 0.f),
+			glm::vec4(90.f, 0.f, 1.f, 0.f),
 		};
 
 		glm::vec3 translation[] = {
 			glm::vec3(0.f, 0.f, -water_surface.caustic_depth),
-			glm::vec3(0.f, water_surface.water_height / 2, -water_surface.caustic_depth * (1 - depth_overflow / 2)),
-			glm::vec3(0.f, -water_surface.water_height / 2, -water_surface.caustic_depth * (1 - depth_overflow / 2)),
-			glm::vec3(-water_surface.water_width / 2, 0.f, -water_surface.caustic_depth * (1 - depth_overflow / 2)),
-			// glm::vec3(waterSurface.waterWidth / 2, 0.f, -waterSurface.caustic_depth * (1 - depthOverflow / 2)),
+			glm::vec3(0.f, water_surface.water_length / 2, -water_surface.caustic_depth * (1 - water_surface.depth_overflow / 2)),
+			glm::vec3(0.f, -water_surface.water_length / 2, -water_surface.caustic_depth * (1 - water_surface.depth_overflow / 2)),
+			glm::vec3(-water_surface.water_width / 2, 0.f, -water_surface.caustic_depth * (1 - water_surface.depth_overflow / 2)),
+			glm::vec3(water_surface.water_width / 2, 0.f, -water_surface.caustic_depth * (1 - water_surface.depth_overflow / 2)),
 		};
-
 
 		for (int i = 0; i < 4; i++) {
 			glm::mat4 model = glm::mat4();
 			model = glm::translate(model, translation[i]);
-			model = glm::rotate(model, 90.f, rotation[i]);
+			model = glm::rotate(model, rotation[i][0], glm::vec3(rotation[i][1], rotation[i][2], rotation[i][3]));
 			model = glm::scale(model, scale[i]);
 
 			glm::mat4 model_view = proj * view * model;
@@ -945,6 +1073,7 @@ int main()
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 		}
 
+		
 		// Draw water and caustic
 		glm::mat4 model = glm::mat4(1.0f);
 		glm::mat4 model_view = proj * view * model;
@@ -970,6 +1099,7 @@ int main()
 		//send the color to the fragment shader
 		glUniform3f(glGetUniformLocation(shaderProg, "color"), water_color[0], water_color[1], water_color[2]);
 		glUniform3f(glGetUniformLocation(shaderProg, "lightColor"), light_color[0], light_color[1], light_color[2]);
+		glUniform1i(glGetUniformLocation(shaderProg, "floorTexture"), 0);
 
 		glUniformMatrix4fv(modelviewParameter, 1, GL_FALSE, glm::value_ptr(model_view));
 		glUniformMatrix4fv(modelParameter, 1, GL_FALSE, glm::value_ptr(model));
