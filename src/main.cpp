@@ -46,8 +46,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
-glm::vec3 camera_pos = glm::vec3(5.f, 0.f, 1.f);
-glm::vec3 camera_front = glm::vec3(-5.0f, 0.0f, -1.f);
+glm::vec3 camera_pos = glm::vec3(5.f, 2.f, 1.f);
+glm::vec3 camera_front = glm::vec3(-5.0f, -2.0f, -1.f);
 glm::vec3 camera_up = glm::vec3(0.0f, 0.0f, 1.0f);
 float delta_time = 0.0f;	// time between current frame and last frame
 float last_frame = 0.0f;
@@ -302,7 +302,7 @@ private:
 		//waterSurface.points;
 		for (int i = 0; i < N * M; i++) {
 			glm::vec3 water_pos = points[i];
-			float ratio = 0.6;
+			float ratio = 0.7;
 			if (water_pos.z > camera_pos.z) {
 				tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
 				continue;
@@ -940,6 +940,18 @@ int main()
 	int raindrops_freq = 10;
 	bool is_first_frame = true;
 
+	float floorAmbientStrength = 0.65f;
+	float floorDiffuseStrength = 0.3f;
+
+	float causticsStrength = 0.99f;
+	float causticsAlpha = 0.4f;
+
+	float waterAmbientStrength = 0.2f;
+	float waterDiffuseStrength = 0.6f;
+	float waterTextureStrength = 1.f;
+	float waterColorStrength = 0.6f;
+	float waterAlpha = 0.65f;
+
 	// Main while loop
 	while (!glfwWindowShouldClose(window))
 	{
@@ -965,6 +977,17 @@ int main()
 
 		ImGui::ColorEdit3("Water Color", water_color);
 		ImGui::SliderFloat("Light Position", &light_pos[2], 3.f, 10.0f);
+
+		ImGui::SliderFloat("caustic strength", &causticsStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("caustic alpha", &causticsAlpha, 0.1f, 1.f);
+		ImGui::SliderFloat("floor ambient strength", &floorAmbientStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("floor diffuse strength", &floorDiffuseStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("waterAmbientStrength", &waterAmbientStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("waterDiffuseStrength", &waterDiffuseStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("waterTextureStrength", &waterTextureStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("waterColorStrength", &waterColorStrength, 0.1f, 1.f);
+		ImGui::SliderFloat("waterAlpha", &waterAlpha, 0.1f, 1.f);
+
 
 		ImGui::End();
 		//set the projection matrix
@@ -1012,7 +1035,7 @@ int main()
 			if (r < rain_prob) {
 				double randx = (double)rand() / (RAND_MAX + 1) * water_surface.water_width - water_surface.water_width / 2;
 				double randy = (double)rand() / (RAND_MAX + 1) * water_surface.water_length - water_surface.water_length / 2;
-				//water_surface.poke(glm::vec3(randx, randy, 0), ripple_height);
+				water_surface.poke(glm::vec3(randx, randy, 0), ripple_height);
 			}
 		}
 		is_first_frame = false;
@@ -1030,6 +1053,8 @@ int main()
 		glUniform3f(glGetUniformLocation(shaderProgFloor, "lightColor"), light_color[0], light_color[1], light_color[2]);
 		glUniform3f(glGetUniformLocation(shaderProgFloor, "lightPos"), light_pos[0], light_pos[1], light_pos[2]);
 		glUniform1i(glGetUniformLocation(shaderProgFloor, "floorTexture"), 0);
+		glUniform1f(glGetUniformLocation(shaderProgFloor, "ambientStrength"), floorAmbientStrength);
+		glUniform1f(glGetUniformLocation(shaderProgFloor, "diffuseStrength"), floorDiffuseStrength);
 
 		// bottom, right, left, back, front
 
@@ -1079,11 +1104,14 @@ int main()
 		glm::mat4 model_view = proj * view * model;
 		glm::mat3 normal_mat = glm::mat3(glm::transpose(glm::inverse(model)));
 
-
+		// Caustic
 		glUseProgram(shaderProgCaustic);
 		glBindVertexArray(water_surface.caustic_vao);
 
+
 		glUniform3f(glGetUniformLocation(shaderProgCaustic, "color"), water_color[0], water_color[1], water_color[2]);
+		glUniform1f(glGetUniformLocation(shaderProgCaustic, "causticsStrength"), causticsStrength);
+		glUniform1f(glGetUniformLocation(shaderProgCaustic, "causticsAlpha"), causticsAlpha);
 
 		glUniformMatrix4fv(glGetUniformLocation(shaderProgCaustic, "modelview"), 1, GL_FALSE, glm::value_ptr(model_view));
 		glUniformMatrix4fv(glGetUniformLocation(shaderProgCaustic, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -1093,6 +1121,7 @@ int main()
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glDrawElements(GL_TRIANGLES, (water_surface.N - 1) * (water_surface.M - 1) * 2 * 3, GL_UNSIGNED_INT, 0);
 
+		// Water
 		glUseProgram(shaderProg);
 		glBindVertexArray(water_surface.vao);
 
@@ -1100,6 +1129,12 @@ int main()
 		glUniform3f(glGetUniformLocation(shaderProg, "color"), water_color[0], water_color[1], water_color[2]);
 		glUniform3f(glGetUniformLocation(shaderProg, "lightColor"), light_color[0], light_color[1], light_color[2]);
 		glUniform1i(glGetUniformLocation(shaderProg, "floorTexture"), 0);
+		glUniform1f(glGetUniformLocation(shaderProg, "ambientStrength"), waterAmbientStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "diffuseStrength"), waterDiffuseStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "textureStrength"), waterTextureStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "colorStrength"), waterColorStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "waterAlpha"), waterAlpha);
+
 
 		glUniformMatrix4fv(modelviewParameter, 1, GL_FALSE, glm::value_ptr(model_view));
 		glUniformMatrix4fv(modelParameter, 1, GL_FALSE, glm::value_ptr(model));

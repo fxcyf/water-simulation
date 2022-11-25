@@ -4,9 +4,12 @@ out vec4 col;
 in vec3 oldPos;
 in vec3 newPos;
 uniform vec3 color;
+uniform float causticsStrength;
+uniform float causticsAlpha;
 void main()
 {
-	float causticsFactor = 0.8;
+//	float causticsStrength = 0.8;
+//	float causticsAlpha = 0.6;
 	float causticsIntensity = 0.0;
 	float oldArea = length(dFdx(oldPos)) * length(dFdy(oldPos));
 	float newArea = length(dFdx(newPos)) * length(dFdy(newPos));
@@ -16,6 +19,6 @@ void main()
 	} else {
 		ratio = oldArea / newArea;
 	}
-	causticsIntensity = causticsFactor * ratio;
-	col = vec4(color * causticsIntensity, 0.6f);
+	causticsIntensity = causticsStrength * ratio;
+	col = vec4(color * causticsIntensity, causticsAlpha);
 }
