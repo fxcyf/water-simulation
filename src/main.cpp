@@ -74,14 +74,14 @@ float light_pos[] = { 0.f, 0.f, 5.f };
 //Vertex array object and vertex buffer object indices 
 GLuint light_vao, light_vbo;
 GLuint floor_vao, floor_vbo;
-GLuint floor_texture;
+GLuint floor_texture, sky_texture;
 
 
 class WaterSurface {
 private:
-	GLuint points_vbo, normals_vbo, elements_vbo, caustic_vbo, tex_coords_vbo;
+	GLuint points_vbo, normals_vbo, elements_vbo, caustic_vbo, floor_tex_coords_vbo, sky_tex_coords_vbo;
 
-	static constexpr int width = 150, length = 300;
+	static constexpr int width = 150, length = 200;
 
 	//float u[width][length];
 	//float v[width][length];
@@ -106,16 +106,22 @@ private:
 	glm::vec3* points = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
 	glm::vec3* normals = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
 	glm::vec3* caustic = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
-	glm::vec2* tex_coords = (glm::vec2*)malloc(sizeof(glm::vec2) * N * M);
+	glm::vec2* floor_tex_coords = (glm::vec2*)malloc(sizeof(glm::vec2) * N * M);
+	glm::vec2* sky_tex_coords = (glm::vec2*)malloc(sizeof(glm::vec2) * N * M);
 	glm::vec3* elements = (glm::vec3*)malloc(sizeof(glm::vec3) * (N - 1) * (M - 1) * 2);
 
 	float* points_buffer = (float*)malloc(sizeof(float) * N * M * 3);
 	float* normals_buffer = (float*)malloc(sizeof(float) * N * M * 3);
 	float* caustic_buffer = (float*)malloc(sizeof(float) * N * M * 3);
-	float* tex_coords_buffer = (float*)malloc(sizeof(float) * N * M * 2);
+	float* floor_tex_coords_buffer = (float*)malloc(sizeof(float) * N * M * 2);
+	float* sky_tex_coords_buffer = (float*)malloc(sizeof(float) * N * M * 2);
 	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
 
 	void heightsCalculate(float dt) {
+		ofstream myfile;
+		myfile.open("example.txt");
+		double sum_of_u = 0.0;
+
 		for (int i = 0; i < this->width; i++) {
 			for (int j = 0; j < this->length; j++) {
 				float v1, v2, v3, v4;
@@ -152,15 +158,14 @@ private:
 				this->v[i][j] += f * dt;
 				this->v[i][j] *= this->damp;
 				this->u_new[i][j] = this->u[i][j] + this->v[i][j] * dt;
-			}
-		}
-
-		double sum_of_u = 0.0;
-		for (int i = 0; i < this->width; i++) {
-			for (int j = 0; j < this->length; j++) {
 				sum_of_u += this->u_new[i][j];
+
+				if (u_new[i][j] > 1.0) {
+					myfile << i << ", " << j << ", " << dt << ", " << u[i][j] << ", " << v[i][j] << ", " << u_new[i][j] << "\n";
+				}
 			}
 		}
+		myfile.close();
 
 		double avg_of_u = sum_of_u / (this->width * this->length);
 
@@ -223,8 +228,8 @@ private:
 
 	void pointsCalculate() {
 		int point_index = 0;
+
 		for (int x = 0; x < N; x++) {
-			//printf("u: (%.2f)\n", x);
 			for (int y = 0; y < M; y++) {
 				float i = -this->water_width / 2 + this->water_width * ((x / (float)this->width));
 				float j = -this->water_length / 2 + this->water_length * ((y / (float)this->length));
@@ -242,27 +247,28 @@ private:
 							continue;
 						}
 
-						float u = -this->water_width / 2 + this->water_width * (k / (float)this->width);
-						float v = -this->water_length / 2 + this->water_length * (l / (float)this->length);
+						float m = -this->water_width / 2 + this->water_width * (k / (float)this->width);
+						float n = -this->water_length / 2 + this->water_length * (l / (float)this->length);
 
 						// Make sure the weight is larger for smaller distances
-						float weight = 100 - (u - i) * (u - i) + (j - v) * (j - v);
+						float weight = 100 - (m - i) * (m - i) + (j - n) * (j - n);
 						avg_height += this->u[k][l] * weight;
+
 						sum_of_weights += weight;
 					}
 				}
 				avg_height /= sum_of_weights;
 
 				this->points[point_index++] = glm::vec3(i, j, avg_height);
+				
 			}
 		}
+
 	}
 
 	void normalsCalculate() {
 		for (int i = 0; i < N; i++) {
-			//printf("u: (%i)\n", i);
 			for (int j = 0; j < M; j++) {
-				//printf("u: (%i)\n", j);
 				// Average the normals for each triangle around us
 				int p1_i = i * M + j;
 				int p2_i = (i + 1) * M + j;
@@ -440,13 +446,13 @@ private:
 		}
 	}
 
-	void texCoordsCalculate() {
+	void floorTexCoordsCalculate() {
 		int tex_coord_index = 0;
 		for (int i = 0; i < N * M; i++) {
 			glm::vec3 water_pos = points[i];
 			float ratio = 0.7;
 			if (water_pos.z > camera_pos.z) {
-				this->tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
+				this->floor_tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
 				continue;
 			}
 			glm::vec3 incident = water_pos - camera_pos;
@@ -543,7 +549,34 @@ private:
 			//if (abs(floor_hit_pos.z + caustic_depth) < 0.007) {
 			//	printf("caustic: (%.2f, %.2f, %.2f), tex_coord: (%.2f, %.2f)\n", floor_hit_pos[0], floor_hit_pos[1], floor_hit_pos[2], tex_coord[0], tex_coord[1]);
 			//}
-			this->tex_coords[tex_coord_index++] = tex_coord;
+			this->floor_tex_coords[tex_coord_index++] = tex_coord;
+		}
+
+	}
+
+	void skyTexCoordsCalculate() {
+		int tex_coord_index = 0;
+		for (int i = 0; i < N * M; i++) {
+			glm::vec3 water_pos = points[i];
+			if (water_pos.z > camera_pos.z) {
+				this->sky_tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
+				continue;
+			}
+			glm::vec3 incident = water_pos - camera_pos;
+			glm::vec3 water_normal = normals[i];
+
+			glm::vec3 reflection = glm::normalize(glm::reflect(incident, water_normal));
+			float constant = abs((light_pos[2] - water_pos.z) / reflection.z);
+			glm::vec3 sky_hit_pos = water_pos + reflection * constant;
+			glm::vec2 tex_coord = glm::vec2(
+				(sky_hit_pos.x + water_width / 2) / water_width,
+				(sky_hit_pos.y + water_length / 2) / water_length
+			);
+
+			//if (abs(floor_hit_pos.z + caustic_depth) < 0.007) {
+			//printf("caustic: (%.2f, %.2f, %.2f), tex_coord: (%.2f, %.2f)\n", sky_hit_pos[0], sky_hit_pos[1], sky_hit_pos[2], tex_coord[0], tex_coord[1]);
+			//}
+			this->sky_tex_coords[tex_coord_index++] = tex_coord;
 		}
 
 	}
@@ -575,13 +608,23 @@ private:
 
 		// Set up the texture coordinates vbo
 		for (int i = 0; i < N * M; i++) {
-			tex_coords_buffer[i * 2] = tex_coords[i].x;
-			tex_coords_buffer[i * 2 + 1] = tex_coords[i].y;
+			floor_tex_coords_buffer[i * 2] = floor_tex_coords[i].x;
+			floor_tex_coords_buffer[i * 2 + 1] = floor_tex_coords[i].y;
 		}
-		glBindBuffer(GL_ARRAY_BUFFER, tex_coords_vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N * M * 2, tex_coords_buffer, GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, floor_tex_coords_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N * M * 2, floor_tex_coords_buffer, GL_STATIC_DRAW);
 		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 		glEnableVertexAttribArray(2);
+
+		// Set up the texture coordinates vbo
+		for (int i = 0; i < N * M; i++) {
+			sky_tex_coords_buffer[i * 2] = sky_tex_coords[i].x;
+			sky_tex_coords_buffer[i * 2 + 1] = sky_tex_coords[i].y;
+		}
+		glBindBuffer(GL_ARRAY_BUFFER, sky_tex_coords_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N * M * 2, sky_tex_coords_buffer, GL_STATIC_DRAW);
+		glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+		glEnableVertexAttribArray(3);
 
 		// Set up elements vbo
 		for (int i = 0; i < (N - 1) * (M - 1) * 2; i++) {
@@ -627,7 +670,7 @@ public:
 	float depth_overflow = 1.2;
 
 	float c = 16.f;
-	float damp = 0.99f;
+	float damp = 0.98;
 
 	GLuint vao, caustic_vao;
 
@@ -638,7 +681,8 @@ public:
 		glGenBuffers(1, &normals_vbo);
 		glGenBuffers(1, &points_vbo);
 		glGenBuffers(1, &caustic_vbo);
-		glGenBuffers(1, &tex_coords_vbo);
+		glGenBuffers(1, &floor_tex_coords_vbo);
+		glGenBuffers(1, &sky_tex_coords_vbo);
 
 		// Initialize water heights
 		for (int i = 0; i < this->width; i++) {
@@ -667,20 +711,22 @@ public:
 		free(points);
 		free(normals);
 		free(caustic);
-		free(tex_coords);
+		free(floor_tex_coords);
+		free(sky_tex_coords);
 		free(elements);
 		free(points_buffer);
 		free(normals_buffer);
 		free(caustic_buffer);
 		free(elements_buffer);
-		free(tex_coords_buffer);
+		free(floor_tex_coords_buffer);
 		glDeleteVertexArrays(1, &this->vao);
 		glDeleteVertexArrays(1, &this->caustic_vao);
 		glDeleteBuffers(1, &this->elements_vbo);
 		glDeleteBuffers(1, &this->normals_vbo);
 		glDeleteBuffers(1, &this->points_vbo);
 		glDeleteBuffers(1, &this->caustic_vbo);
-		glDeleteBuffers(1, &this->tex_coords_vbo);
+		glDeleteBuffers(1, &this->floor_tex_coords_vbo);
+		glDeleteBuffers(1, &this->sky_tex_coords_vbo);
 	}
 
 	void poke(glm::vec3 pos, float ripple_height) {
@@ -716,8 +762,11 @@ public:
 		this->elementsCalculate();
 		// Calculate the caustic
 		this->causticCalculate();
-		// Calculate the texture of surface
-		this->texCoordsCalculate();
+		// Calculate the texture of water refraction
+		this->floorTexCoordsCalculate();
+		// Calculate the texture of water reflection
+		this->skyTexCoordsCalculate();
+
 		// Build scene
 		this->buildScene();
 	}
@@ -739,7 +788,7 @@ void InitShaders(GLuint* program, const char* vsSrc, const char* fsSrc) {
 }
 
 
-void BuildFloorScene(GLuint& VBO, GLuint& VAO, GLuint& Texture, char* file_name) {
+void BuildFloorScene(GLuint& VBO, GLuint& VAO) {
 	float vertices[] = {
 		// positions          // normals		// texture coords
 		 0.5f,  0.5f, 0.0f,   0.f, 0.f, 1.f,	1.0f, 1.0f, // top right
@@ -776,7 +825,9 @@ void BuildFloorScene(GLuint& VBO, GLuint& VAO, GLuint& Texture, char* file_name)
 
 	glBindVertexArray(0);
 
-	// Bind Texture
+}
+
+void BuildTexture(GLuint& Texture, char* file_name) {
 	stbi_set_flip_vertically_on_load(true);
 	int x, y, n;
 	int force_channels = 3;
@@ -909,6 +960,8 @@ int main()
 	GLuint shaderProg;
 	InitShaders(&shaderProg, (char*)"shaders/water.vert", (char*)"shaders/water.frag");
 	glUseProgram(shaderProg);
+	glUniform1i(glGetUniformLocation(shaderProg, "floorTexture"), 0);
+	glUniform1i(glGetUniformLocation(shaderProg, "skyTexture"), 1);
 	GLint modelviewParameter = glGetUniformLocation(shaderProg, "modelview");
 	GLint modelParameter = glGetUniformLocation(shaderProg, "model");
 	GLint normalMatParameter = glGetUniformLocation(shaderProg, "normalMat");
@@ -923,7 +976,10 @@ int main()
 	//GLint causticLightPosParameter = glGetUniformLocation(shaderProgCaustic, "lightPos");
 	//GLint causticDepthParameter = glGetUniformLocation(shaderProgCaustic, "causticDepth");
 
-	BuildFloorScene(floor_vbo, floor_vao, floor_texture, (char*)"floor4.jpg");
+	BuildFloorScene(floor_vbo, floor_vao);
+	BuildTexture(floor_texture, (char*)"floor4.jpg");
+	BuildTexture(sky_texture, (char*)"sky.jpg");
+
 	GLuint shaderProgFloor;
 	InitShaders(&shaderProgFloor, (char*)"shaders/floor.vert", (char*)"shaders/floor.frag");
 	
@@ -1159,11 +1215,16 @@ int main()
 		// Water
 		glUseProgram(shaderProg);
 		glBindVertexArray(water_surface.vao);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, floor_texture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, sky_texture);
+
 
 		//send the color to the fragment shader
 		glUniform3f(glGetUniformLocation(shaderProg, "color"), water_color[0], water_color[1], water_color[2]);
 		glUniform3f(glGetUniformLocation(shaderProg, "lightColor"), light_color[0], light_color[1], light_color[2]);
-		glUniform1i(glGetUniformLocation(shaderProg, "floorTexture"), 0);
+
 		glUniform1f(glGetUniformLocation(shaderProg, "ambientStrength"), waterAmbientStrength);
 		glUniform1f(glGetUniformLocation(shaderProg, "diffuseStrength"), waterDiffuseStrength);
 		glUniform1f(glGetUniformLocation(shaderProg, "textureStrength"), waterTextureStrength);

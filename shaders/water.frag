@@ -2,13 +2,15 @@
 out vec4 col;
 in vec3 Normal;
 in vec3 FragPos;
-in vec2 TexCoord;
+in vec2 FloorTexCoord;
+in vec2 SkyTexCoord;
 
 uniform vec3 color;
 uniform vec3 lightColor;
 uniform vec3 lightPos;
 uniform vec3 viewPos;
 uniform sampler2D floorTexture;
+uniform sampler2D skyTexture;
 uniform float ambientStrength;
 uniform float diffuseStrength;
 uniform float textureStrength;
@@ -31,13 +33,15 @@ void main()
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
 	vec3 specular = specularStrength * spec * lightColor;
 
-	float floor_kd = diffuseStrength * diff;
+	float kd = diffuseStrength * diff;
 
 //	float textureStrength = 0.8;
 //	float colorStrength = 0.6;
 //	float waterAlpha = 0.5;
-    vec3 floor_texel = texture(floorTexture, TexCoord).xyz;
-	vec3 result = colorStrength * ((ambient + diffuse + specular) * color + floor_kd * textureStrength * floor_texel);
+    vec3 floor_texel = texture(floorTexture, FloorTexCoord).xyz;
+	vec3 sky_texel = texture(skyTexture, SkyTexCoord).xyz;
+
+	vec3 result = colorStrength * ((ambient + diffuse + specular) * color + kd * textureStrength * (floor_texel + sky_texel));
 //	vec3 result = floor_kd * 0.5 * floor_texel;
 
    col = vec4(result, waterAlpha);
