@@ -47,7 +47,7 @@ void processInput(GLFWwindow* window);
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 glm::vec3 camera_pos = glm::vec3(5.f, 0.f, 1.f);
-glm::vec3 camera_front = glm::vec3(-5.0f, 0.0f, 1.f);
+glm::vec3 camera_front = glm::vec3(-5.0f, 0.0f, -1.f);
 glm::vec3 camera_up = glm::vec3(0.0f, 0.0f, 1.0f);
 float delta_time = 0.0f;	// time between current frame and last frame
 float last_frame = 0.0f;
@@ -81,7 +81,7 @@ class WaterSurface {
 private:
 	GLuint points_vbo, normals_vbo, elements_vbo, caustic_vbo, floor_tex_coords_vbo, sky_tex_coords_vbo;
 
-	static constexpr int width = 150, length = 200;
+	static constexpr int width = 120, length = 120;
 
 	//float u[width][length];
 	//float v[width][length];
@@ -117,6 +117,7 @@ private:
 	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
 
 	void heightsCalculate(float dt) {
+		
 		double sum_of_u = 0.0;
 
 		for (int i = 0; i < this->width; i++) {
@@ -151,7 +152,7 @@ private:
 					v4 = this->u[i][j + 1];
 				}
 
-				float f = c * c * ((v1 + v2 + v3 + v4) - 4 * this->u[i][j]);
+				float f = c_sq * ((v1 + v2 + v3 + v4) - 4 * this->u[i][j]);
 				this->v[i][j] += f * dt;
 				this->v[i][j] *= this->damp;
 				this->u_new[i][j] = this->u[i][j] + this->v[i][j] * dt;
@@ -612,32 +613,12 @@ public:
 	float caustic_depth = 3.f;
 	float depth_overflow = 1.2;
 
-	float c = 16.f;
+	float c_sq = 144.f;
 	float damp = 0.98;
 
 	GLuint vao, caustic_vao;
 
-	WaterSurface() {
-		glGenVertexArrays(1, &vao);
-		glGenVertexArrays(1, &caustic_vao);
-		glGenBuffers(1, &elements_vbo);
-		glGenBuffers(1, &normals_vbo);
-		glGenBuffers(1, &points_vbo);
-		glGenBuffers(1, &caustic_vbo);
-		glGenBuffers(1, &floor_tex_coords_vbo);
-		glGenBuffers(1, &sky_tex_coords_vbo);
-
-		// Initialize water heights
-		for (int i = 0; i < this->width; i++) {
-			this->u[i] = (float*)malloc(sizeof(float) * length);
-			this->v[i] = (float*)malloc(sizeof(float) * length);
-			for (int j = 0; j < this->length; j++) {
-				this->u[i][j] = 0;
-				this->v[i][j] = 0;
-			}
-			this->u_new[i] = (float*)malloc(sizeof(float) * length);
-		}
-	}
+	WaterSurface() {}
 
 	~WaterSurface() {
 		for (int i = 0; i < width; i++) {
@@ -669,6 +650,28 @@ public:
 		glDeleteBuffers(1, &this->sky_tex_coords_vbo);
 	}
 
+	void init() {
+		glGenVertexArrays(1, &vao);
+		glGenVertexArrays(1, &caustic_vao);
+		glGenBuffers(1, &elements_vbo);
+		glGenBuffers(1, &normals_vbo);
+		glGenBuffers(1, &points_vbo);
+		glGenBuffers(1, &caustic_vbo);
+		glGenBuffers(1, &floor_tex_coords_vbo);
+		glGenBuffers(1, &sky_tex_coords_vbo);
+
+		// Initialize water heights
+		for (int i = 0; i < this->width; i++) {
+			this->u[i] = (float*)malloc(sizeof(float) * length);
+			this->v[i] = (float*)malloc(sizeof(float) * length);
+			for (int j = 0; j < this->length; j++) {
+				this->u[i][j] = 0;
+				this->v[i][j] = 0;
+			}
+			this->u_new[i] = (float*)malloc(sizeof(float) * length);
+		}
+	}
+
 	void poke(glm::vec3 pos, float ripple_height) {
 		if (pos.x > -this->water_width / 2 &&
 			pos.x < this->water_width / 2 &&
@@ -678,6 +681,8 @@ public:
 			int j = ((pos.y + this->water_length / 2) * this->length / this->water_length);
 
 			if (i > 1 && j > 1 && i < this->width - 2 && j < this->length - 2) {
+				//i = 1;
+				//j = 1;
 				this->u[i][j] = ripple_height;
 				this->u[i - 1][j - 1] = ripple_height * 0.7;
 				this->u[i - 1][j] = ripple_height * 0.85;
@@ -710,6 +715,8 @@ public:
 		this->buildScene();
 	}
 };
+
+
 
 void InitShaders(GLuint* program, const char* vsSrc, const char* fsSrc) {
 	std::vector<GLuint> shaderList;
@@ -863,6 +870,8 @@ static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, i
 }
 
 
+WaterSurface water_surface;
+
 int main()
 {
 	srand(time(NULL));
@@ -895,7 +904,7 @@ int main()
 	glViewport(0, 0, scrWidth, scrHeight);
 
 	// waterSurface cannot be moved out of main function
-	WaterSurface water_surface;
+	water_surface.init();
 	GLuint shaderProg;
 	InitShaders(&shaderProg, (char*)"shaders/water.vert", (char*)"shaders/water.frag");
 	glUseProgram(shaderProg);
@@ -928,7 +937,7 @@ int main()
 
 	//Background color
 	glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-	//glPolygonMode(GL_FRONT, GL_LINE);
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	//glPolygonMode(GL_BACK, GL_FILL);
 
 	glPointSize(point_size);
@@ -955,9 +964,11 @@ int main()
 	//glCullFace(GL_BACK); // GL_FRONT, GL_BACK, GL_FRONT_AND_BACK
 	//glFrontFace(GL_CCW);
 
+	bool is_first_frame = true;
+	bool is_paused = false;
+
 	float ripple_height = 0.03f;
 	int raindrops_freq = 10;
-	bool is_first_frame = true;
 
 	float floorAmbientStrength = 0.65f;
 	float floorDiffuseStrength = 0.3f;
@@ -989,11 +1000,12 @@ int main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 		ImGui::Begin("Water Simulation");
+		ImGui::Checkbox("Pause", &is_paused);
 		ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
 		if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags)) {
             if (ImGui::BeginTabItem("Interaction"))
             {
-				ImGui::SliderFloat("Diffusion Rate", &water_surface.c, 5.0f, 20.0f);
+				ImGui::SliderFloat("Diffusion Rate", &water_surface.c_sq, 10.0f, 250.0f);
 				ImGui::SliderFloat("Damp Rate", &water_surface.damp, 0.9f, 0.9999f);
 				ImGui::SliderFloat("Ripple Height", &ripple_height, 0.01f, 0.1f);
 				ImGui::SliderInt("Rain Intensity", &raindrops_freq, 0, 80);
@@ -1024,7 +1036,7 @@ int main()
 				ImGui::EndTabItem();
 			}
             ImGui::EndTabBar();
-          }
+        }
 
 
 		ImGui::End();
@@ -1076,9 +1088,11 @@ int main()
 				water_surface.poke(glm::vec3(randx, randy, 0), ripple_height);
 			}
 		}
-		is_first_frame = false;
 
-		water_surface.update(delta_time);
+		is_first_frame = false;
+		if (!is_paused) {
+			water_surface.update(min(delta_time, 0.05f));
+		}
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, floor_texture);
