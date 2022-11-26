@@ -39,7 +39,7 @@ void main()
 //	float textureStrength = 0.8;
 //	float colorStrength = 0.6;
 //	float waterAlpha = 0.5;
-    vec3 floor_texel = texture(floorTexture, FloorTexCoord).xyz;
+    	vec3 floor_texel = texture(floorTexture, FloorTexCoord).xyz;
 	vec3 sky_texel = texture(skyTexture, SkyTexCoord).xyz;
 
 	vec3 result = colorStrength * ((ambient + diffuse + specular) * color + kd * (floorTextureStrength * floor_texel + skyTextureStrength * sky_texel));
