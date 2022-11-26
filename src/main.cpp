@@ -47,7 +47,7 @@ void processInput(GLFWwindow* window);
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 glm::vec3 camera_pos = glm::vec3(5.f, 0.f, 1.f);
-glm::vec3 camera_front = glm::vec3(-5.0f, 0.0f, -1.f);
+glm::vec3 camera_front = glm::vec3(-5.0f, 0.0f, 1.f);
 glm::vec3 camera_up = glm::vec3(0.0f, 0.0f, 1.0f);
 float delta_time = 0.0f;	// time between current frame and last frame
 float last_frame = 0.0f;
@@ -101,7 +101,6 @@ private:
 	float** v = (float**)malloc(sizeof(float*) * width);
 
 	float** u_new = (float**)malloc(sizeof(float*) * width);
-	float** control_point_heights = (float**)malloc(sizeof(float*) * width);
 
 	glm::vec3* points = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
 	glm::vec3* normals = (glm::vec3*)malloc(sizeof(glm::vec3) * N * M);
@@ -118,8 +117,6 @@ private:
 	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
 
 	void heightsCalculate(float dt) {
-		ofstream myfile;
-		myfile.open("example.txt");
 		double sum_of_u = 0.0;
 
 		for (int i = 0; i < this->width; i++) {
@@ -159,69 +156,15 @@ private:
 				this->v[i][j] *= this->damp;
 				this->u_new[i][j] = this->u[i][j] + this->v[i][j] * dt;
 				sum_of_u += this->u_new[i][j];
-
-				if (u_new[i][j] > 1.0) {
-					myfile << i << ", " << j << ", " << dt << ", " << u[i][j] << ", " << v[i][j] << ", " << u_new[i][j] << "\n";
-				}
 			}
 		}
-		myfile.close();
 
 		double avg_of_u = sum_of_u / (this->width * this->length);
 
 		for (int i = 0; i < this->width; i++) {
 			for (int j = 0; j < this->length; j++) {
-				this->u[i][j] = this->u_new[i][j] - avg_of_u;
-				this->control_point_heights[i][j] = this->u[i][j];
-			}
-		}
-
-		static int x_delta[9] = { 0, -1, -1, 0, 1, 1, 1, 0, -1 };
-		static int y_delta[9] = { 0, 0, -1, -1, -1, 0, 1, 1, 1 };
-
-		for (int i = 3; i < this->width; i += 3) {
-			for (int j = 3; j < this->length; j += 3) {
-				glm::vec3 points[9];
-
-				for (int k = 0; k < 9; k++) {
-					int x_index = i + x_delta[k];
-					int y_index = j + y_delta[k];
-
-					points[k].x = -this->water_width / 2 + this->water_width * (1 - (x_index / (float)this->width));
-					points[k].y = -this->water_length / 2 + this->water_length * (1 - (y_index / (float)this->length));
-					points[k].z = this->control_point_heights[x_index][y_index];
-				}
-
-				float sum_xx = 0.0;
-				float sum_yy = 0.0;
-				float sum_xy = 0.0;
-				float sum_yz = 0.0;
-				float sum_xz = 0.0;
-
-				for (int k = 0; k < 9; k++) {
-					sum_xx += points[k].x * points[k].x;
-					sum_yy += points[k].y * points[k].y;
-					sum_xy += points[k].x * points[k].y;
-					sum_yz += points[k].y * points[k].z;
-					sum_xz += points[k].x * points[k].z;
-				}
-
-				float D = sum_xx * sum_yy - sum_xy * sum_xy;
-				float a = (sum_yz * sum_xy - sum_xz * sum_yy) / D;
-				float b = (sum_xy * sum_xz - sum_xx * sum_yz) / D;
-
-				glm::vec3 n(a, b, 1);
-				glm::vec3 p = points[0];
-
-				for (int k = 1; k < 9; k++) {
-					glm::vec3 p0 = points[k];
-
-					float z = (n.x * (p.x - p0.x) + n.y * (p.y - p0.y)) / n.z + p.z;
-
-					int x_index = i + x_delta[k];
-					int y_index = j + y_delta[k];
-					this->control_point_heights[x_index][y_index] = z;
-				}
+				this->u[i][j] = min(this->u_new[i][j] - avg_of_u, 3.0);
+				this->u[i][j] = max(this->u[i][j], -3.f);
 			}
 		}
 	}
@@ -419,7 +362,7 @@ private:
 		//waterSurface.points;
 		for (int i = 0; i < N * M; i++) {
 			glm::vec3 water_pos = this->points[i];
-			glm::vec3 incident = water_pos - light_pos_vec;
+			glm::vec3 incident = glm::normalize(water_pos - light_pos_vec);
 			glm::vec3 water_normal = this->normals[i];
 
 			glm::vec3 refraction = glm::normalize(glm::refract(incident, water_normal, 0.7));
@@ -455,7 +398,7 @@ private:
 				this->floor_tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
 				continue;
 			}
-			glm::vec3 incident = water_pos - camera_pos;
+			glm::vec3 incident = glm::normalize(water_pos - camera_pos);
 			glm::vec3 water_normal = normals[i];
 
 			glm::vec3 refraction = glm::normalize(glm::refract(incident, water_normal, ratio));
@@ -562,7 +505,7 @@ private:
 				this->sky_tex_coords[tex_coord_index++] = glm::vec2(0.f, 0.f);
 				continue;
 			}
-			glm::vec3 incident = water_pos - camera_pos;
+			glm::vec3 incident = glm::normalize(water_pos - camera_pos);
 			glm::vec3 water_normal = normals[i];
 
 			glm::vec3 reflection = glm::normalize(glm::reflect(incident, water_normal));
@@ -693,7 +636,6 @@ public:
 				this->v[i][j] = 0;
 			}
 			this->u_new[i] = (float*)malloc(sizeof(float) * length);
-			this->control_point_heights[i] = (float*)malloc(sizeof(float) * length);
 		}
 	}
 
@@ -702,12 +644,10 @@ public:
 			free(u[i]);
 			free(v[i]);
 			free(u_new[i]);
-			free(control_point_heights[i]);
 		}
 		free(u);
 		free(v);
 		free(u_new);
-		free(control_point_heights);
 		free(points);
 		free(normals);
 		free(caustic);
@@ -766,7 +706,6 @@ public:
 		this->floorTexCoordsCalculate();
 		// Calculate the texture of water reflection
 		this->skyTexCoordsCalculate();
-
 		// Build scene
 		this->buildScene();
 	}
@@ -989,7 +928,9 @@ int main()
 
 	//Background color
 	glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	//glPolygonMode(GL_FRONT, GL_LINE);
+	//glPolygonMode(GL_BACK, GL_FILL);
+
 	glPointSize(point_size);
 	glLineWidth(line_width);
 
@@ -1007,9 +948,14 @@ int main()
 	//glfwSetMouseButtonCallback(window, MouseButtonCallback);;
 	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	//glEnable(GL_DEPTH_TEST);
+	//glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
+	////glEnable(GL_VERTEX_PROGRAM_TWO_SIDE_ARB);
 	glEnable(GL_BLEND);
+	//glEnable(GL_CULL_FACE);
+	//glCullFace(GL_BACK); // GL_FRONT, GL_BACK, GL_FRONT_AND_BACK
+	//glFrontFace(GL_CCW);
 
-	float ripple_height = 0.3f;
+	float ripple_height = 0.03f;
 	int raindrops_freq = 10;
 	bool is_first_frame = true;
 
@@ -1021,7 +967,8 @@ int main()
 
 	float waterAmbientStrength = 0.2f;
 	float waterDiffuseStrength = 0.6f;
-	float waterTextureStrength = 1.f;
+	float waterRefractionStrength = 1.f;
+	float waterReflectionStrength = 1.f;
 	float waterColorStrength = 0.6f;
 	float waterAlpha = 0.5f;
 
@@ -1048,7 +995,7 @@ int main()
             {
 				ImGui::SliderFloat("Diffusion Rate", &water_surface.c, 5.0f, 20.0f);
 				ImGui::SliderFloat("Damp Rate", &water_surface.damp, 0.9f, 0.9999f);
-				ImGui::SliderFloat("Ripple Height", &ripple_height, 0.1f, 1.0f);
+				ImGui::SliderFloat("Ripple Height", &ripple_height, 0.01f, 0.1f);
 				ImGui::SliderInt("Rain Intensity", &raindrops_freq, 0, 80);
 				ImGui::SliderFloat("Light Position", &light_pos[2], 3.f, 10.0f);
                 ImGui::EndTabItem();
@@ -1056,33 +1003,33 @@ int main()
             if (ImGui::BeginTabItem("Water Surface"))
             {
 				ImGui::ColorEdit3("Color", water_color);
-				ImGui::SliderFloat("Color Strength", &waterColorStrength, 0.1f, 1.f);
-				ImGui::SliderFloat("Alpha", &waterAlpha, 0.1f, 1.f);
-				ImGui::SliderFloat("Ambient Strength", &waterAmbientStrength, 0.1f, 1.f);
-				ImGui::SliderFloat("Diffuse Strength", &waterDiffuseStrength, 0.1f, 1.f);
-				ImGui::SliderFloat("Refraction Strength", &waterTextureStrength, 0.1f, 1.f);
+				ImGui::SliderFloat("Color Strength", &waterColorStrength, 0.0f, 1.f);
+				ImGui::SliderFloat("Alpha", &waterAlpha, 0.0f, 1.f);
+				ImGui::SliderFloat("Ambient Strength", &waterAmbientStrength, 0.0f, 1.f);
+				ImGui::SliderFloat("Diffuse Strength", &waterDiffuseStrength, 0.0f, 1.f);
+				ImGui::SliderFloat("Refraction Strength", &waterRefractionStrength, 0.0f, 1.f);
+				ImGui::SliderFloat("Reflection Strength", &waterReflectionStrength, 0.0f, 1.f);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Caustic"))
             {
-				ImGui::SliderFloat("Caustic Strength", &causticsStrength, 0.1f, 1.f);
-				ImGui::SliderFloat("Caustic Alpha", &causticsAlpha, 0.1f, 1.f);
+				ImGui::SliderFloat("Caustic Strength", &causticsStrength, 0.0f, 1.f);
+				ImGui::SliderFloat("Caustic Alpha", &causticsAlpha, 0.0f, 1.f);
                 ImGui::EndTabItem();
             }
 			if (ImGui::BeginTabItem("Floor"))
 			{
-				ImGui::SliderFloat("Floor Ambient Strength", &floorAmbientStrength, 0.1f, 1.f);
-				ImGui::SliderFloat("Floor Diffuse Strength", &floorDiffuseStrength, 0.1f, 1.f);
+				ImGui::SliderFloat("Floor Ambient Strength", &floorAmbientStrength, 0.f, 1.f);
+				ImGui::SliderFloat("Floor Diffuse Strength", &floorDiffuseStrength, 0.f, 1.f);
 				ImGui::EndTabItem();
 			}
             ImGui::EndTabBar();
           }
 
 
-
 		ImGui::End();
 		//set the projection matrix
-		glm::mat4 proj = glm::perspective(fov, (float)scrWidth/(float)scrHeight, 0.8f, 100.0f);
+		glm::mat4 proj = glm::perspective(fov, (float)scrWidth/(float)scrHeight, 0.01f, 100.0f);
 		//set the viewing matrix (looking from [0,0,5] to [0,0,0])
 		glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
@@ -1227,7 +1174,8 @@ int main()
 
 		glUniform1f(glGetUniformLocation(shaderProg, "ambientStrength"), waterAmbientStrength);
 		glUniform1f(glGetUniformLocation(shaderProg, "diffuseStrength"), waterDiffuseStrength);
-		glUniform1f(glGetUniformLocation(shaderProg, "textureStrength"), waterTextureStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "floorTextureStrength"), waterRefractionStrength);
+		glUniform1f(glGetUniformLocation(shaderProg, "skyTextureStrength"), waterReflectionStrength);
 		glUniform1f(glGetUniformLocation(shaderProg, "colorStrength"), waterColorStrength);
 		glUniform1f(glGetUniformLocation(shaderProg, "waterAlpha"), waterAlpha);
 

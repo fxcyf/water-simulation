@@ -13,7 +13,8 @@ uniform sampler2D floorTexture;
 uniform sampler2D skyTexture;
 uniform float ambientStrength;
 uniform float diffuseStrength;
-uniform float textureStrength;
+uniform float floorTextureStrength;
+uniform float skyTextureStrength;
 uniform float colorStrength;
 uniform float waterAlpha;
 void main()
@@ -41,7 +42,7 @@ void main()
     vec3 floor_texel = texture(floorTexture, FloorTexCoord).xyz;
 	vec3 sky_texel = texture(skyTexture, SkyTexCoord).xyz;
 
-	vec3 result = colorStrength * ((ambient + diffuse + specular) * color + kd * textureStrength * (floor_texel + sky_texel));
+	vec3 result = colorStrength * ((ambient + diffuse + specular) * color + kd * (floorTextureStrength * floor_texel + skyTextureStrength * sky_texel));
 //	vec3 result = floor_kd * 0.5 * floor_texel;
 
    col = vec4(result, waterAlpha);

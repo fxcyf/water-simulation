@@ -3,6 +3,7 @@
 out vec4 col;
 in vec3 oldPos;
 in vec3 newPos;
+//in bool gl_FrontFacing;
 uniform vec3 color;
 uniform float causticsStrength;
 uniform float causticsAlpha;
@@ -20,5 +21,9 @@ void main()
 		ratio = oldArea / newArea;
 	}
 	causticsIntensity = causticsStrength * ratio;
-	col = vec4(color * causticsIntensity, causticsAlpha);
+	if (gl_FrontFacing) {
+		col = vec4(color * causticsIntensity, causticsAlpha);
+	} else {
+		col = vec4(color * causticsIntensity * 5, causticsAlpha / 5);
+	}
 }
