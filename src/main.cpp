@@ -117,9 +117,7 @@ private:
 	int* elements_buffer = (int*)malloc(sizeof(int) * (N - 1) * (M - 1) * 2 * 3);
 
 	void heightsCalculate(float dt) {
-		
 		double sum_of_u = 0.0;
-
 		for (int i = 0; i < this->width; i++) {
 			for (int j = 0; j < this->length; j++) {
 				float v1, v2, v3, v4;
@@ -862,13 +860,11 @@ void BuildLightScene(GLuint& VBO, GLuint& VAO) { //return VBO and VAO values n i
 	glEnableVertexAttribArray(0);
 }
 
-
 //Quit when ESC is released
 static void KbdCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
-
 
 WaterSurface water_surface;
 
